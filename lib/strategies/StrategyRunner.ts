@@ -2,8 +2,10 @@ import { createStrategy } from './StrategyRegistry';
 import { getExchangeAdapter } from '../exchange/ExchangeFactory';
 import { prisma } from '../db';
 import { log } from '../logger';
+import { getPredictor } from '../ml/InstancePredictor';
 import type { Signal, StrategyStatus } from '@/types/strategy';
 import type { BaseStrategy } from './BaseStrategy';
+import type { PowerTraderStrategy } from './implementations/PowerTraderStrategy';
 
 interface RunnerState {
   strategyId: string;
@@ -47,6 +49,18 @@ export async function startStrategy(strategyId: string): Promise<void> {
     try {
       const candles = await adapter.fetchOHLCV(record.symbol, record.timeframe, 2);
       if (!candles.length) return;
+
+      // Inject live neural signals into PowerTrader before each candle
+      if (record.type === 'POWER_TRADER') {
+        try {
+          const predictor = await getPredictor(record.symbol);
+          const ticker = await adapter.fetchTicker(record.symbol);
+          const candles1h = record.timeframe === '1h' ? candles : await adapter.fetchOHLCV(record.symbol, '1h', 3);
+          const signals = predictor.aggregateSignals(candles1h, ticker.last);
+          (strategy as unknown as PowerTraderStrategy).setNeuralLevels(signals.maxLongSignal, signals.maxShortSignal);
+        } catch { /* non-fatal — strategy keeps last known levels */ }
+      }
+
       const signal = await strategy.onCandle(candles[candles.length - 1]);
       runner.lastSignal = signal;
       statusCallback?.(strategyId, 'running', signal);

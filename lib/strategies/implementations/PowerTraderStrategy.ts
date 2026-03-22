@@ -148,6 +148,11 @@ export class PowerTraderStrategy extends BaseStrategy {
     };
   }
 
+  setNeuralLevels(longLevel: number, shortLevel: number): void {
+    (this.config as Record<string, unknown>)._neuralLongLevel = longLevel;
+    (this.config as Record<string, unknown>)._neuralShortLevel = shortLevel;
+  }
+
   getState(): PowerTraderState {
     return { ...this.state };
   }
