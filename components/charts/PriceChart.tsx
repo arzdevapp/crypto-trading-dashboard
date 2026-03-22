@@ -28,51 +28,67 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const chart = createChart(containerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: '#0E1626' },
-        textColor: '#8B949E',
-      },
-      grid: {
-        vertLines: { color: '#243044' },
-        horzLines: { color: '#243044' },
-      },
-      crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: '#243044' },
-      timeScale: { borderColor: '#243044', timeVisible: true },
-      width: containerRef.current.clientWidth,
-      height: containerRef.current.clientHeight || 300,
-    });
+    let chart: IChartApi | null = null;
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderUpColor: '#22c55e',
-      borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
-    });
+    const initChart = (width: number, height: number) => {
+      if (chart || !containerRef.current) return;
 
-    chartRef.current = chart;
-    candleSeriesRef.current = candleSeries;
+      chart = createChart(containerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: '#0E1626' },
+          textColor: '#8B949E',
+        },
+        grid: {
+          vertLines: { color: '#243044' },
+          horzLines: { color: '#243044' },
+        },
+        crosshair: { mode: 1 },
+        rightPriceScale: { borderColor: '#243044' },
+        timeScale: { borderColor: '#243044', timeVisible: true },
+        width,
+        height,
+      });
 
-    const resizeObserver = new ResizeObserver(() => {
-      if (containerRef.current) {
-        chart.applyOptions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
+      const candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor: '#22c55e',
+        downColor: '#ef4444',
+        borderUpColor: '#22c55e',
+        borderDownColor: '#ef4444',
+        wickUpColor: '#22c55e',
+        wickDownColor: '#ef4444',
+      });
+
+      chartRef.current = chart;
+      candleSeriesRef.current = candleSeries;
+    };
+
+    // Use ResizeObserver to init only when container has real dimensions
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const w = entry.contentRect.width;
+      const h = entry.contentRect.height;
+      if (w === 0 || h === 0) return;
+
+      if (!chart) {
+        initChart(w, h);
+      } else {
+        chart.applyOptions({ width: w, height: h });
       }
     });
+
     resizeObserver.observe(containerRef.current);
+
+    // Fallback: if container already has size on mount, init immediately
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
+    if (w > 0 && h > 0) initChart(w, h);
 
     return () => {
       resizeObserver.disconnect();
-      // Null refs BEFORE remove so any in-flight async callbacks see null and bail
       chartRef.current = null;
       candleSeriesRef.current = null;
       levelSeriesRef.current = [];
-      chart.remove();
+      chart?.remove();
     };
   }, []);
 
@@ -171,7 +187,7 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
         </div>
       )}
       <CardContent className="p-0 flex-1 min-h-0">
-        <div ref={containerRef} className="w-full h-full" />
+        <div ref={containerRef} className="w-full h-full" style={{ minHeight: '280px' }} />
       </CardContent>
     </Card>
   );
