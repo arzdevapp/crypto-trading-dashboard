@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { encrypt } from '@/lib/encryption';
 
 export async function GET() {
   const exchanges = await prisma.exchangeConfig.findMany({
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
   }
   try {
     const exchange = await prisma.exchangeConfig.create({
-      data: { name, label, apiKey, apiSecret, sandbox: sandbox ?? true },
+      data: { name, label, apiKey: encrypt(apiKey), apiSecret: encrypt(apiSecret), sandbox: sandbox ?? true },
     });
     return NextResponse.json(exchange, { status: 201 });
   } catch (err) {
