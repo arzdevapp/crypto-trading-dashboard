@@ -51,26 +51,26 @@ export default function DashboardPage() {
       </div>
 
       {/* Main content — fills remaining height */}
-      <div className="flex-1 min-h-0 p-2 overflow-hidden">
-        <div className="h-full grid grid-cols-1 xl:grid-cols-4 gap-2 items-start" style={{ gridTemplateRows: '100%' }}>
+      <div className="flex-1 min-h-0 p-2 overflow-y-auto xl:overflow-hidden">
+        <div className="xl:h-full grid grid-cols-1 xl:grid-cols-4 gap-2 xl:items-start" style={{ gridTemplateRows: undefined }} >
 
-          {/* Left column — scrollable */}
-          <div className="flex flex-col gap-2 overflow-y-auto min-h-0 pr-0.5">
+          {/* Left column — scrollable on desktop, stacks on mobile */}
+          <div className="flex flex-col gap-2 xl:overflow-y-auto xl:min-h-0 xl:h-full pr-0.5 order-2 xl:order-1">
             <AccountMetrics />
             <NeuralSignalMatrix />
             <StrategyStatusPanel />
-<LiveFeed />
+            <LiveFeed />
             <SentimentPanel />
           </div>
 
-          {/* Center — 3 cols, flex column */}
-          <div className="xl:col-span-3 flex flex-col gap-2 min-h-0">
+          {/* Center — 3 cols on desktop, chart-first on mobile */}
+          <div className="xl:col-span-3 flex flex-col gap-2 xl:min-h-0 xl:h-full order-1 xl:order-2">
             {/* Symbol picker bar */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <SymbolSearch />
             </div>
-            {/* Chart fills available space, min height so it never collapses */}
-            <div className="flex-1 min-h-[280px]">
+            {/* Chart — fixed height on mobile, flex on desktop */}
+            <div className="h-[350px] xl:h-auto xl:flex-1 xl:min-h-[280px]">
               {activeExchangeId ? (
                 <PriceChart
                   exchangeId={activeExchangeId}

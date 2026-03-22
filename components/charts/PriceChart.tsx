@@ -148,7 +148,7 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
   }, [longLevels, shortLevels, avgCostBasis, trailingPMLine]);
 
   return (
-    <Card className="overflow-hidden h-full min-h-[380px] flex flex-col">
+    <Card className="overflow-hidden h-full min-h-[300px] flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <div className="flex items-center gap-3">
           <span className="font-semibold text-sm">{symbol}</span>
