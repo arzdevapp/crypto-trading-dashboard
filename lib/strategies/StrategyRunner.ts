@@ -1,9 +1,11 @@
 import { createStrategy } from './StrategyRegistry';
 import { getExchangeAdapter } from '../exchange/ExchangeFactory';
+import { getPredictor } from '../ml/InstancePredictor';
 import { prisma } from '../db';
 import { log } from '../logger';
 import type { Signal, StrategyStatus } from '@/types/strategy';
 import type { BaseStrategy } from './BaseStrategy';
+import type { PowerTraderStrategy } from './implementations/PowerTraderStrategy';
 
 interface RunnerState {
   strategyId: string;
@@ -36,6 +38,21 @@ export async function startStrategy(strategyId: string): Promise<void> {
 
   await strategy.initialize((limit) => adapter.fetchOHLCV(record.symbol, record.timeframe, limit));
 
+  // For PowerTrader: ensure the ML predictor is trained for this symbol/timeframe before first tick
+  if (record.type === 'POWER_TRADER') {
+    try {
+      const predictor = await getPredictor(record.symbol);
+      if (!predictor.isTrainedFor(record.timeframe)) {
+        const historicalCandles = await adapter.fetchOHLCV(record.symbol, record.timeframe, 500);
+        await predictor.trainTimeframe(record.timeframe, historicalCandles);
+        await log('info', `strategy:${strategyId}`, `ML predictor trained for ${record.symbol}/${record.timeframe} (${historicalCandles.length} candles)`);
+      }
+    } catch (err) {
+      // Non-fatal: strategy will run with neuralLong/Short = 0 until training succeeds
+      await log('error', `strategy:${strategyId}`, `ML predictor training failed: ${(err as Error).message}`);
+    }
+  }
+
   await prisma.strategy.update({ where: { id: strategyId }, data: { status: 'running' } });
   statusCallback?.(strategyId, 'running');
   await log('info', `strategy:${strategyId}`, `Strategy started: ${record.name}`, { type: record.type, symbol: record.symbol, timeframe: record.timeframe });
@@ -47,6 +64,21 @@ export async function startStrategy(strategyId: string): Promise<void> {
     try {
       const candles = await adapter.fetchOHLCV(record.symbol, record.timeframe, 2);
       if (!candles.length) return;
+
+      // PowerTrader: fetch neural signals and inject before the tick
+      if (record.type === 'POWER_TRADER') {
+        try {
+          const predictor    = await getPredictor(record.symbol);
+          const currentPrice = candles[candles.length - 1].close;
+          // Use a slightly larger candle window so aggregateSignals has context
+          const ctxCandles   = await adapter.fetchOHLCV(record.symbol, record.timeframe, 30);
+          const { maxLongSignal, maxShortSignal } = predictor.aggregateSignals(ctxCandles, currentPrice);
+          (strategy as unknown as PowerTraderStrategy).setNeuralSignals(maxLongSignal, maxShortSignal);
+        } catch {
+          // Non-fatal: strategy retains last injected values (or defaults to 0)
+        }
+      }
+
       const signal = await strategy.onCandle(candles[candles.length - 1]);
       runner.lastSignal = signal;
       statusCallback?.(strategyId, 'running', signal);
