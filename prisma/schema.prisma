@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model ExchangeConfig {
+  id         String     @id @default(cuid())
+  name       String
+  label      String
+  apiKey     String
+  apiSecret  String
+  sandbox    Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  strategies Strategy[]
+  trades     Trade[]
+}
+
+model Strategy {
+  id         String          @id @default(cuid())
+  name       String
+  type       String
+  symbol     String
+  timeframe  String
+  config     String
+  status     String          @default("stopped")
+  exchangeId String
+  exchange   ExchangeConfig  @relation(fields: [exchangeId], references: [id])
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  trades     Trade[]
+  backtests  BacktestResult[]
+}
+
+model Trade {
+  id         String          @id @default(cuid())
+  exchangeId String
+  exchange   ExchangeConfig  @relation(fields: [exchangeId], references: [id])
+  strategyId String?
+  strategy   Strategy?       @relation(fields: [strategyId], references: [id])
+  symbol     String
+  side       String
+  type       String
+  quantity   Float
+  price      Float
+  fee        Float           @default(0)
+  pnl        Float?
+  orderId    String
+  status     String
+  openedAt   DateTime        @default(now())
+  closedAt   DateTime?
+}
+
+model BacktestResult {
+  id               String    @id @default(cuid())
+  strategyId       String
+  strategy         Strategy  @relation(fields: [strategyId], references: [id])
+  symbol           String
+  timeframe        String
+  startDate        DateTime
+  endDate          DateTime
+  initialCapital   Float
+  finalCapital     Float
+  totalTrades      Int
+  winRate          Float
+  sharpeRatio      Float
+  maxDrawdown      Float
+  profitFactor     Float
+  tradesJson       String
+  equityCurveJson  String
+  createdAt        DateTime  @default(now())
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   // info | warn | error | trade | signal
+  source    String   // e.g. "strategy:abc123", "ml:train", "order:place"
+  message   String
+  meta      String?  // JSON stringified extra context
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([createdAt])
+}
+
+model ModelMemory {
+  id          String   @id @default(cuid())
+  symbol      String
+  timeframe   String
+  memoryJson  String   // JSON stringified PatternMemory
+  candleCount Int
+  trainedAt   DateTime @default(now())
+
+  @@unique([symbol, timeframe])
+}
+
+model RiskProfile {
+  id                   String  @id @default(cuid())
+  maxPositionSizePct   Float   @default(5.0)
+  maxDrawdownPct       Float   @default(20.0)
+  defaultStopLossPct   Float   @default(2.0)
+  defaultTakeProfitPct Float   @default(4.0)
+  maxOpenPositions     Int     @default(5)
+}
