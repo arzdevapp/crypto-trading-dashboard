@@ -5,9 +5,18 @@ import { OpenOrdersList } from '@/components/trading/OpenOrdersList';
 import { SymbolSelector } from '@/components/trading/SymbolSelector';
 import { useStore } from '@/store';
 import { PageHelp } from '@/components/ui/page-help';
+import { useQuery } from '@tanstack/react-query';
 
 export default function TradingPage() {
   const { activeExchangeId, selectedSymbol, setSelectedSymbol } = useStore();
+
+  const { data: ticker } = useQuery<{ last: number; change24h: number; percentage: number }>({
+    queryKey: ['ticker', activeExchangeId, selectedSymbol],
+    queryFn: () => fetch(`/api/exchanges/${activeExchangeId}/ticker/${encodeURIComponent(selectedSymbol)}`).then(r => r.json()),
+    enabled: !!activeExchangeId,
+    refetchInterval: 10000,
+    staleTime: 9000,
+  });
 
   if (!activeExchangeId) {
     return (
@@ -28,7 +37,19 @@ export default function TradingPage() {
         {/* Symbol selector */}
         <div className="rounded-lg border overflow-hidden flex-shrink-0" style={{ background: '#0E1626', borderColor: '#243044' }}>
           <div className="px-3 py-2 border-b flex items-center justify-between" style={{ borderColor: '#243044', background: '#070B10' }}>
-            <span className="text-[11px] font-mono font-bold tracking-widest uppercase" style={{ color: '#00E5FF' }}>Trading</span>
+            <div className="flex flex-col">
+              <span className="text-[11px] font-mono font-bold tracking-widest uppercase" style={{ color: '#00E5FF' }}>Trading</span>
+              {ticker && (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-sm font-mono font-bold" style={{ color: '#C7D1DB' }}>
+                    ${ticker.last?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                  </span>
+                  <span className="text-[10px] font-mono" style={{ color: (ticker.percentage ?? 0) >= 0 ? '#00FF66' : '#ef4444' }}>
+                    {(ticker.percentage ?? 0) >= 0 ? '+' : ''}{(ticker.percentage ?? 0).toFixed(2)}%
+                  </span>
+                </div>
+              )}
+            </div>
             <PageHelp
               title="Trading"
               description="Place manual buy and sell orders directly on your connected exchange. Supports market, limit and stop orders."

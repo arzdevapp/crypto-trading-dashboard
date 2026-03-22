@@ -92,35 +92,54 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
     };
   }, []);
 
-  // Load candle data
+  // Load candle data + auto-refresh latest candle every 30s
   useEffect(() => {
-    if (!candleSeriesRef.current || !exchangeId || !symbol) return;
-    setLoading(true);
+    if (!exchangeId || !symbol) return;
 
-    const controller = new AbortController();
-
-    fetch(
-      `/api/exchanges/${exchangeId}/ohlcv?symbol=${encodeURIComponent(symbol)}&timeframe=${selectedTimeframe}&limit=200`,
-      { signal: controller.signal }
-    )
-      .then((r) => r.json())
-      .then((candles: { timestamp: number; open: number; high: number; low: number; close: number }[]) => {
+    const loadCandles = async (controller: AbortController, full = false) => {
+      if (!candleSeriesRef.current) return;
+      if (full) setLoading(true);
+      try {
+        const limit = full ? 200 : 2;
+        const res = await fetch(
+          `/api/exchanges/${exchangeId}/ohlcv?symbol=${encodeURIComponent(symbol)}&timeframe=${selectedTimeframe}&limit=${limit}`,
+          { signal: controller.signal }
+        );
+        const candles: { timestamp: number; open: number; high: number; low: number; close: number }[] = await res.json();
         if (!candleSeriesRef.current || !chartRef.current) return;
+
         const data: CandlestickData[] = candles.map((c) => ({
           time: Math.floor(c.timestamp / 1000) as Time,
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
+          open: c.open, high: c.high, low: c.low, close: c.close,
         }));
-        lastCandleDataRef.current = data;
-        candleSeriesRef.current.setData(data);
-        chartRef.current.timeScale().fitContent();
-      })
-      .catch((err) => { if (err.name !== 'AbortError') console.error(err); })
-      .finally(() => setLoading(false));
 
-    return () => controller.abort();
+        if (full) {
+          lastCandleDataRef.current = data;
+          candleSeriesRef.current.setData(data);
+          chartRef.current.timeScale().fitContent();
+        } else {
+          // Update/append latest candle only
+          for (const candle of data) {
+            candleSeriesRef.current.update(candle);
+          }
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name !== 'AbortError') console.error(err);
+      } finally {
+        if (full) setLoading(false);
+      }
+    };
+
+    const controller = new AbortController();
+    loadCandles(controller, true);
+
+    // Refresh latest candle every 30s
+    const interval = setInterval(() => loadCandles(controller, false), 30000);
+
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [exchangeId, symbol, selectedTimeframe]);
 
   // Draw neural level lines
