@@ -57,9 +57,9 @@ pm2 save
 pm2 startup systemd -u root --hp /root
 systemctl enable pm2-root
 
-echo "=== Setting up auto-update cron (every 10 minutes) ==="
+echo "=== Setting up auto-update cron (daily at midnight) ==="
 chmod +x "$APP_DIR/scripts/deploy.sh"
-(crontab -l 2>/dev/null; echo "*/10 * * * * bash $APP_DIR/scripts/deploy.sh >> $APP_DIR/logs/cron.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "0 0 * * * bash $APP_DIR/scripts/deploy.sh >> $APP_DIR/logs/cron.log 2>&1") | crontab -
 
 echo ""
 echo "=== Setup complete ==="
