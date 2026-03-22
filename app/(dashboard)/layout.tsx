@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
+import { MobileMenu } from '@/components/layout/MobileMenu';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Header />
         <main className="flex-1 overflow-hidden">{children}</main>
       </div>
+      {/* Mobile menu rendered outside the flex layout to avoid clipping */}
+      <MobileMenu />
     </div>
   );
 }
