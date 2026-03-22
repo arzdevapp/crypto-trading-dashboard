@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Brain, RefreshCw, Zap, Square, Activity, Eye, Trash2 } from 'lucide-react';
+import { NewsSentimentWidget } from '@/components/news/NewsSentimentWidget';
 import { PageHelp } from '@/components/ui/page-help';
 import { formatCurrency, formatCrypto, formatPercent } from '@/lib/utils';
 
@@ -276,6 +277,9 @@ export default function DCABotPage() {
             {starting ? 'STARTING…' : 'START BOT'}
           </Button>
         )}
+
+        {/* News Sentiment */}
+        <NewsSentimentWidget symbol={selectedSymbol} />
 
         {/* Active Bots Panel */}
         <div className="rounded-lg border overflow-hidden flex-shrink-0" style={{ background: '#0E1626', borderColor: '#243044' }}>

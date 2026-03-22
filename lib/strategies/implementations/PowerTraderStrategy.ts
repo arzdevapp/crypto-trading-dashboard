@@ -56,15 +56,26 @@ export class PowerTraderStrategy extends BaseStrategy {
   computeSignal(candles: OHLCVCandle[]): Signal {
     const cfg = this.config as Record<string, unknown>;
     const tradeStartLevel = cfg.tradeStartLevel as number ?? 3;
-    const startAllocationPct = cfg.startAllocationPct as number ?? 0.5;
     const pmStartPct = cfg.pmStartPct as number ?? 5.0;
     const pmStartPctDCA = cfg.pmStartPctDCA as number ?? 2.5;
     const trailingGapPct = cfg.trailingGapPct as number ?? 0.5;
     const quantity = cfg.quantity as number ?? 0.001;
 
-    // Use injected neural signal level (set externally by PowerTrader runner)
-    const neuralLongLevel = (cfg as Record<string, unknown>)._neuralLongLevel as number ?? 0;
-    const neuralShortLevel = (cfg as Record<string, unknown>)._neuralShortLevel as number ?? 0;
+    // Neural signal levels injected by StrategyRunner before each candle
+    const neuralLongLevel = cfg._neuralLongLevel as number ?? 0;
+    const neuralShortLevel = cfg._neuralShortLevel as number ?? 0;
+
+    // News sentiment injected by StrategyRunner (-1 bearish → +1 bullish)
+    const newsSentiment = cfg._newsSentiment as number ?? 0;
+    const newsSentimentLabel = cfg._newsSentimentLabel as string ?? 'Neutral';
+
+    // Adjust entry threshold based on news sentiment:
+    // Bad news → require stronger neural signal; good news → allow slightly earlier entry
+    const newsAdjustment = newsSentiment <= -0.5 ? 2
+      : newsSentiment <= -0.2 ? 1
+      : newsSentiment >= 0.4 ? -1
+      : 0;
+    const effectiveStartLevel = Math.max(1, tradeStartLevel + newsAdjustment);
 
     const currentPrice = candles[candles.length - 1].close;
     const dcaLevels: DCALevel[] = (cfg.dcaLevels as DCALevel[]) ?? DEFAULT_DCA_LEVELS;
@@ -97,9 +108,14 @@ export class PowerTraderStrategy extends BaseStrategy {
       }
     }
 
+    // === HARD BLOCK: Very bearish news — skip entry entirely ===
+    if (!this.state.inPosition && newsSentiment <= -0.5) {
+      return { action: 'hold', reason: `News block: sentiment ${newsSentimentLabel} (${newsSentiment.toFixed(2)}) — waiting for neutral` };
+    }
+
     // === BUY LOGIC: Entry ===
     if (!this.state.inPosition) {
-      if (neuralLongLevel >= tradeStartLevel && neuralShortLevel === 0) {
+      if (neuralLongLevel >= effectiveStartLevel && neuralShortLevel === 0) {
         this.state.inPosition = true;
         this.state.avgCostBasis = currentPrice;
         this.state.positionSize = quantity;
@@ -110,10 +126,10 @@ export class PowerTraderStrategy extends BaseStrategy {
           action: 'buy',
           quantity,
           price: currentPrice,
-          reason: `Entry: neural long signal ${neuralLongLevel} >= ${tradeStartLevel}`,
+          reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}`,
         };
       }
-      return { action: 'hold', reason: `Waiting for signal (long=${neuralLongLevel}, need ${tradeStartLevel})` };
+      return { action: 'hold', reason: `Waiting: neural=${neuralLongLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
     }
 
     // === DCA LOGIC: Add to position ===
@@ -151,6 +167,11 @@ export class PowerTraderStrategy extends BaseStrategy {
   setNeuralLevels(longLevel: number, shortLevel: number): void {
     (this.config as Record<string, unknown>)._neuralLongLevel = longLevel;
     (this.config as Record<string, unknown>)._neuralShortLevel = shortLevel;
+  }
+
+  setNewsSentiment(score: number, label: string): void {
+    (this.config as Record<string, unknown>)._newsSentiment = score;
+    (this.config as Record<string, unknown>)._newsSentimentLabel = label;
   }
 
   getState(): PowerTraderState {

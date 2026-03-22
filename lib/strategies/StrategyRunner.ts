@@ -3,6 +3,7 @@ import { getExchangeAdapter } from '../exchange/ExchangeFactory';
 import { prisma } from '../db';
 import { log } from '../logger';
 import { getPredictor } from '../ml/InstancePredictor';
+import { getNewsSentiment } from '../news/NewsSentimentScorer';
 import type { Signal, StrategyStatus } from '@/types/strategy';
 import type { BaseStrategy } from './BaseStrategy';
 import type { PowerTraderStrategy } from './implementations/PowerTraderStrategy';
@@ -50,7 +51,7 @@ export async function startStrategy(strategyId: string): Promise<void> {
       const candles = await adapter.fetchOHLCV(record.symbol, record.timeframe, 2);
       if (!candles.length) return;
 
-      // Inject live neural signals into PowerTrader before each candle
+      // Inject live neural signals + news sentiment into PowerTrader before each candle
       if (record.type === 'POWER_TRADER') {
         try {
           const predictor = await getPredictor(record.symbol);
@@ -59,6 +60,11 @@ export async function startStrategy(strategyId: string): Promise<void> {
           const signals = predictor.aggregateSignals(candles1h, ticker.last);
           (strategy as unknown as PowerTraderStrategy).setNeuralLevels(signals.maxLongSignal, signals.maxShortSignal);
         } catch { /* non-fatal — strategy keeps last known levels */ }
+
+        try {
+          const sentiment = await getNewsSentiment(record.symbol);
+          (strategy as unknown as PowerTraderStrategy).setNewsSentiment(sentiment.score, sentiment.label);
+        } catch { /* non-fatal */ }
       }
 
       const signal = await strategy.onCandle(candles[candles.length - 1]);
