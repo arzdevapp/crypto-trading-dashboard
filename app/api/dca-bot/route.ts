@@ -5,18 +5,47 @@ import { startStrategy, stopStrategy, getRunnerStatus, getStrategyInstance } fro
 import { getExchangeAdapter } from '@/lib/exchange/ExchangeFactory';
 import type { PowerTraderStrategy } from '@/lib/strategies/implementations/PowerTraderStrategy';
 
-// GET — current bot status for a given exchange+symbol
+// GET — current bot status for a given exchange+symbol, or list all bots
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const exchangeId = searchParams.get('exchangeId');
   const symbol = searchParams.get('symbol');
+  const listAll = searchParams.get('all') === '1';
 
-  if (!exchangeId || !symbol) {
-    return NextResponse.json({ error: 'exchangeId and symbol required' }, { status: 400 });
+  if (!exchangeId) {
+    return NextResponse.json({ error: 'exchangeId required' }, { status: 400 });
   }
 
   try {
-    // Find the POWER_TRADER strategy for this exchange+symbol
+    // List all POWER_TRADER bots for this exchange
+    if (listAll || !symbol) {
+      const strategies = await prisma.strategy.findMany({
+        where: { exchangeId, type: 'POWER_TRADER' },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const bots = strategies.map(s => {
+        const runner = getRunnerStatus(s.id);
+        const instance = getStrategyInstance(s.id) as PowerTraderStrategy | undefined;
+        const powerState = instance?.getState?.() ?? null;
+        return {
+          id: s.id,
+          symbol: s.symbol,
+          timeframe: s.timeframe,
+          status: s.status,
+          running: !!runner,
+          lastSignal: runner?.lastSignal ?? null,
+          error: runner?.error ?? null,
+          powerState,
+          config: JSON.parse(s.config),
+          createdAt: s.createdAt,
+        };
+      });
+
+      return NextResponse.json({ bots });
+    }
+
+    // Single bot status
     const strategy = await prisma.strategy.findFirst({
       where: { exchangeId, symbol, type: 'POWER_TRADER' },
       orderBy: { createdAt: 'desc' },

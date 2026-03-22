@@ -4,13 +4,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PriceChart } from '@/components/charts/PriceChart';
 import { NeuralLevelsOverlay } from '@/components/charts/NeuralLevelsOverlay';
 import { SymbolSelector } from '@/components/trading/SymbolSelector';
-import { EquityCurveChart } from '@/components/analytics/EquityCurveChart';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Brain, RefreshCw, Zap, Square, TrendingUp, TrendingDown, Activity } from 'lucide-react';
+import { Brain, RefreshCw, Zap, Square, Activity, Eye, Trash2 } from 'lucide-react';
 import { PageHelp } from '@/components/ui/page-help';
 import { formatCurrency, formatCrypto, formatPercent } from '@/lib/utils';
 
@@ -32,6 +31,19 @@ interface BotStatus {
   } | null;
 }
 
+interface BotListItem {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  status: string;
+  running: boolean;
+  lastSignal: { action: string; reason?: string } | null;
+  error: string | null;
+  powerState: BotStatus['powerState'];
+  config: Record<string, unknown>;
+  createdAt: string;
+}
+
 export default function DCABotPage() {
   const { activeExchangeId, selectedSymbol, setSelectedSymbol } = useStore();
   const [longLevels, setLongLevels] = useState<number[]>([]);
@@ -47,8 +59,8 @@ export default function DCABotPage() {
     setShortLevels(short);
   }, []);
 
-  // Poll bot status every 5s
-  const { data: botStatus, isLoading: statusLoading } = useQuery<BotStatus>({
+  // Poll current bot status
+  const { data: botStatus } = useQuery<BotStatus>({
     queryKey: ['dca-bot', activeExchangeId, selectedSymbol],
     queryFn: () => fetch(`/api/dca-bot?exchangeId=${activeExchangeId}&symbol=${encodeURIComponent(selectedSymbol)}`).then(r => r.json()),
     enabled: !!activeExchangeId,
@@ -56,7 +68,17 @@ export default function DCABotPage() {
     staleTime: 4000,
   });
 
-  // Train model
+  // Poll all bots list
+  const { data: allBotsData } = useQuery<{ bots: BotListItem[] }>({
+    queryKey: ['dca-bot-list', activeExchangeId],
+    queryFn: () => fetch(`/api/dca-bot?exchangeId=${activeExchangeId}&all=1`).then(r => r.json()),
+    enabled: !!activeExchangeId,
+    refetchInterval: 5000,
+    staleTime: 4000,
+  });
+  const allBots = allBotsData?.bots ?? [];
+
+  // Train
   const { mutate: trainModel, isPending: training } = useMutation({
     mutationFn: async () => {
       if (!activeExchangeId) throw new Error('No exchange selected');
@@ -75,7 +97,7 @@ export default function DCABotPage() {
     onError: (err) => toast.error((err as Error).message),
   });
 
-  // Start bot
+  // Start
   const { mutate: startBot, isPending: starting } = useMutation({
     mutationFn: async () => {
       const res = await fetch('/api/dca-bot', {
@@ -100,17 +122,19 @@ export default function DCABotPage() {
     onSuccess: () => {
       toast.success('DCA Bot started');
       queryClient.invalidateQueries({ queryKey: ['dca-bot'] });
+      queryClient.invalidateQueries({ queryKey: ['dca-bot-list'] });
     },
     onError: (err) => toast.error((err as Error).message),
   });
 
-  // Stop bot
+  // Stop (by symbol or by strategyId)
   const { mutate: stopBot, isPending: stopping } = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (targetSymbol?: string) => {
+      const sym = targetSymbol ?? selectedSymbol;
       const res = await fetch('/api/dca-bot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'stop', exchangeId: activeExchangeId, symbol: selectedSymbol }),
+        body: JSON.stringify({ action: 'stop', exchangeId: activeExchangeId, symbol: sym }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
       return res.json();
@@ -118,6 +142,21 @@ export default function DCABotPage() {
     onSuccess: () => {
       toast.success('DCA Bot stopped');
       queryClient.invalidateQueries({ queryKey: ['dca-bot'] });
+      queryClient.invalidateQueries({ queryKey: ['dca-bot-list'] });
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  // Delete bot
+  const { mutate: deleteBot } = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/strategies/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete');
+    },
+    onSuccess: () => {
+      toast.success('Bot removed');
+      queryClient.invalidateQueries({ queryKey: ['dca-bot'] });
+      queryClient.invalidateQueries({ queryKey: ['dca-bot-list'] });
     },
     onError: (err) => toast.error((err as Error).message),
   });
@@ -141,8 +180,8 @@ export default function DCABotPage() {
   return (
     <div className="h-full flex flex-col xl:flex-row gap-2 p-2 overflow-y-auto xl:overflow-hidden" style={{ background: '#070B10' }}>
 
-      {/* Left panel */}
-      <div className="flex flex-col gap-2 xl:w-60 flex-shrink-0 xl:overflow-y-auto">
+      {/* Left panel — controls + active bots list */}
+      <div className="flex flex-col gap-2 xl:w-64 flex-shrink-0 xl:overflow-y-auto">
 
         {/* Header */}
         <div className="flex items-center justify-between flex-shrink-0">
@@ -151,18 +190,17 @@ export default function DCABotPage() {
             <span className="text-[11px] font-mono font-bold tracking-widest uppercase" style={{ color: '#00E5FF' }}>DCA Bot</span>
             <PageHelp
               title="DCA Bot"
-              description="Automated DCA bot powered by a kNN neural model. Trains on historical price patterns, then automatically buys on dips and sells on trailing profit targets."
+              description="Automated DCA bot powered by a kNN neural model. Run multiple instances on different symbols simultaneously."
               steps={[
-                { label: 'Train the model', detail: 'Click Train — fetches 500 candles across 1h/4h/1d and saves patterns to the database. Only needs re-training when market conditions shift.' },
-                { label: 'Configure settings', detail: 'Set Start Level (min neural signal to enter), Quantity (base asset per order), and Profit Margin % target.' },
-                { label: 'Start the bot', detail: 'Click START BOT. It creates a real strategy and begins polling your exchange every candle interval.' },
-                { label: 'Watch live state', detail: 'The position card updates every 5s with real cost basis, P&L, DCA stage, and trailing stop line.' },
-                { label: 'Stop the bot', detail: 'Click STOP BOT to halt all polling. Open positions remain on the exchange — you must close manually if needed.' },
+                { label: 'Train the model', detail: 'Click Train to build pattern memory for the selected symbol.' },
+                { label: 'Configure & Start', detail: 'Set params and click START BOT. Each symbol gets its own bot instance.' },
+                { label: 'Monitor active bots', detail: 'The Active Bots panel shows all running instances. Click VIEW to switch to that bot.' },
+                { label: 'Stop a bot', detail: 'Click STOP on any active bot, or use the main STOP button for the selected symbol.' },
               ]}
               tips={[
-                'The bot places REAL orders on your exchange. Use Testnet first.',
-                'Re-train periodically — market patterns change over weeks.',
-                'Start Level 3-4 is balanced. Higher = more conservative entry.',
+                'You can run multiple bots on different symbols at the same time.',
+                'Each bot is independent — different symbols, timeframes, and settings.',
+                'The bot places REAL orders. Use Testnet first.',
               ]}
             />
           </div>
@@ -213,15 +251,6 @@ export default function DCABotPage() {
               <Label className="text-[10px] font-mono" style={{ color: '#8B949E' }}>Profit Margin %</Label>
               <Input className="h-7 mt-1 text-xs font-mono" type="number" step="0.5" value={pmStartPct} onChange={e => setPmStartPct(e.target.value)} disabled={running} />
             </div>
-            {/* Legend */}
-            <div className="space-y-0.5 pt-1 border-t" style={{ borderColor: '#243044' }}>
-              {[['bg-blue-500','Long zones (buy)'], ['bg-orange-500','Short zones (resist)'], ['bg-yellow-500','Cost basis'], ['bg-green-500','Trailing PM line']].map(([cls, lbl]) => (
-                <div key={lbl} className="flex items-center gap-1.5">
-                  <div className={`w-5 h-0.5 ${cls} flex-shrink-0`} />
-                  <span className="text-[9px] font-mono" style={{ color: '#8B949E' }}>{lbl}</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -230,7 +259,7 @@ export default function DCABotPage() {
           <Button
             className="flex-shrink-0 h-8 font-mono text-xs font-bold gap-2"
             style={{ background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440' }}
-            onClick={() => stopBot()}
+            onClick={() => stopBot(selectedSymbol)}
             disabled={stopping}
           >
             {stopping ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Square className="w-3 h-3" />}
@@ -248,9 +277,35 @@ export default function DCABotPage() {
           </Button>
         )}
 
-        {/* Equity curve */}
-        <div className="flex-1 min-h-0">
-          <EquityCurveChart />
+        {/* Active Bots Panel */}
+        <div className="rounded-lg border overflow-hidden flex-shrink-0" style={{ background: '#0E1626', borderColor: '#243044' }}>
+          <div className="px-3 py-1.5 border-b flex items-center justify-between" style={{ borderColor: '#243044', background: '#070B10' }}>
+            <span className="text-[10px] font-mono font-bold tracking-widest uppercase" style={{ color: '#8B949E' }}>Active Bots</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: '#121C2F', color: allBots.filter(b => b.running).length > 0 ? '#00FF66' : '#8B949E' }}>
+              {allBots.filter(b => b.running).length} running
+            </span>
+          </div>
+          <div className="max-h-[300px] overflow-y-auto">
+            {allBots.length === 0 ? (
+              <div className="px-3 py-4 text-center">
+                <p className="text-[10px] font-mono" style={{ color: '#8B949E' }}>No bots created yet</p>
+                <p className="text-[9px] font-mono mt-0.5" style={{ color: '#243044' }}>Select a symbol and click START BOT</p>
+              </div>
+            ) : (
+              allBots.map(bot => (
+                <BotRow
+                  key={bot.id}
+                  bot={bot}
+                  isSelected={bot.symbol === selectedSymbol}
+                  onView={() => setSelectedSymbol(bot.symbol)}
+                  onStop={() => stopBot(bot.symbol)}
+                  onDelete={() => {
+                    if (confirm(`Delete ${bot.symbol} bot?`)) deleteBot(bot.id);
+                  }}
+                />
+              ))
+            )}
+          </div>
         </div>
       </div>
 
@@ -279,7 +334,7 @@ export default function DCABotPage() {
         >
           {/* Status bar */}
           <div
-            className="flex items-center gap-3 px-4 py-2 border-b"
+            className="flex items-center gap-3 px-4 py-2 border-b flex-wrap"
             style={{ borderColor: '#243044', background: '#070B10' }}
           >
             <div className="flex items-center gap-1.5">
@@ -308,7 +363,7 @@ export default function DCABotPage() {
           </div>
 
           {/* Position metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: '#243044' }}>
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-px" style={{ background: '#243044' }}>
             {[
               {
                 label: 'Position',
@@ -335,7 +390,7 @@ export default function DCABotPage() {
                 color: ps?.pmActive ? '#00FF66' : '#C7D1DB',
               },
             ].map(({ label, value, sub, color }) => (
-              <div key={label} className="px-4 py-2.5" style={{ background: '#0E1626' }}>
+              <div key={label} className="px-3 xl:px-4 py-2.5" style={{ background: '#0E1626' }}>
                 <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#243044' }}>{label}</div>
                 <div className="text-sm font-mono font-bold" style={{ color }}>{value}</div>
                 {sub && <div className="text-[9px] font-mono mt-0.5" style={{ color: '#8B949E' }}>{sub}</div>}
@@ -344,7 +399,7 @@ export default function DCABotPage() {
           </div>
 
           {/* Neural levels bar */}
-          <div className="flex items-center gap-4 px-4 py-2 border-t" style={{ borderColor: '#243044' }}>
+          <div className="flex items-center gap-3 xl:gap-4 px-3 xl:px-4 py-2 border-t flex-wrap" style={{ borderColor: '#243044' }}>
             <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#243044' }}>Neural</span>
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] font-mono" style={{ color: '#60a5fa' }}>LONG</span>
@@ -360,11 +415,111 @@ export default function DCABotPage() {
             </div>
             {running && (
               <span className="ml-auto text-[9px] font-mono animate-pulse" style={{ color: '#00FF66' }}>
-                LIVE · refreshes every 5s
+                LIVE
               </span>
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Active bot row ── */
+function BotRow({ bot, isSelected, onView, onStop, onDelete }: {
+  bot: BotListItem;
+  isSelected: boolean;
+  onView: () => void;
+  onStop: () => void;
+  onDelete: () => void;
+}) {
+  const ps = bot.powerState;
+
+  return (
+    <div
+      className="px-3 py-2 border-b transition-colors"
+      style={{
+        borderColor: '#1a2538',
+        background: isSelected ? '#121C2F' : 'transparent',
+      }}
+    >
+      {/* Top: symbol + status */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style={{
+              background: bot.running ? '#00FF66' : bot.status === 'error' ? '#ef4444' : '#8B949E',
+              boxShadow: bot.running ? '0 0 4px #00FF66' : 'none',
+            }}
+          />
+          <span className="text-[11px] font-mono font-bold truncate" style={{ color: '#C7D1DB' }}>
+            {bot.symbol}
+          </span>
+          <span className="text-[9px] font-mono" style={{ color: '#8B949E' }}>
+            {bot.timeframe}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {!isSelected && (
+            <button
+              onClick={onView}
+              className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded transition-colors hover:bg-[#00E5FF20]"
+              style={{ color: '#00E5FF' }}
+              title="View this bot"
+            >
+              <Eye className="w-3 h-3" />
+            </button>
+          )}
+          {bot.running && (
+            <button
+              onClick={onStop}
+              className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded transition-colors hover:bg-[#ef444420]"
+              style={{ color: '#ef4444' }}
+              title="Stop"
+            >
+              <Square className="w-3 h-3" />
+            </button>
+          )}
+          {!bot.running && (
+            <button
+              onClick={onDelete}
+              className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded transition-colors hover:bg-[#ef444420]"
+              style={{ color: '#8B949E' }}
+              title="Delete"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom: position info */}
+      <div className="flex items-center gap-3 mt-1">
+        {ps?.inPosition ? (
+          <>
+            <span className="text-[9px] font-mono" style={{ color: '#8B949E' }}>
+              Pos: <span style={{ color: '#C7D1DB' }}>{formatCrypto(ps.positionSize, 6)}</span>
+            </span>
+            <span className="text-[9px] font-mono" style={{ color: '#8B949E' }}>
+              DCA: <span style={{ color: '#C7D1DB' }}>{ps.dcaStage}/7</span>
+            </span>
+            {ps.pmActive && (
+              <span className="text-[9px] font-mono" style={{ color: '#00FF66' }}>PM</span>
+            )}
+          </>
+        ) : (
+          <span className="text-[9px] font-mono" style={{ color: '#243044' }}>
+            {bot.running ? 'waiting for signal…' : bot.status === 'error' ? 'error' : 'stopped'}
+          </span>
+        )}
+        {bot.lastSignal && (
+          <span className="text-[9px] font-mono ml-auto" style={{
+            color: bot.lastSignal.action === 'buy' ? '#00FF66' : bot.lastSignal.action === 'sell' ? '#ef4444' : '#8B949E'
+          }}>
+            {bot.lastSignal.action.toUpperCase()}
+          </span>
+        )}
       </div>
     </div>
   );
