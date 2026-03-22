@@ -16,6 +16,8 @@ interface TradingState {
 interface UIState {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  mobileMenuOpen: boolean;
+  setMobileMenuOpen: (open: boolean) => void;
 }
 
 type AppState = ExchangeState & TradingState & UIState;
@@ -36,6 +38,8 @@ export const useStore = create<AppState>()(
       // UI
       sidebarOpen: true,
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      mobileMenuOpen: false,
+      setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
     }),
     {
       name: 'crypto-trading-store',

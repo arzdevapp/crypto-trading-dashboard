@@ -1,5 +1,5 @@
 'use client';
-import { Bell, RefreshCw } from 'lucide-react';
+import { Bell, RefreshCw, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStore } from '@/store';
@@ -13,7 +13,7 @@ interface ExchangeConfig {
 }
 
 export function Header() {
-  const { activeExchangeId, setActiveExchangeId } = useStore();
+  const { activeExchangeId, setActiveExchangeId, setMobileMenuOpen } = useStore();
   const queryClient = useQueryClient();
 
   const { data: exchanges = [] } = useQuery<ExchangeConfig[]>({
@@ -27,6 +27,12 @@ export function Header() {
   return (
     <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4 gap-4">
       <div className="flex items-center gap-2">
+        <Button
+          variant="ghost" size="icon" className="h-8 w-8 xl:hidden"
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          <Menu className="w-4 h-4" />
+        </Button>
         {exchanges.length > 0 ? (
           <Select value={activeExchangeId ?? ''} onValueChange={setActiveExchangeId}>
             <SelectTrigger className="w-44 h-8 text-xs">
