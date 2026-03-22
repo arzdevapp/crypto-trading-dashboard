@@ -15,6 +15,7 @@ export const STRATEGY_TYPES = [
   { id: 'GRID', name: 'Grid Trading' },
   { id: 'BOLLINGER', name: 'Bollinger Bands' },
   { id: 'POWER_TRADER', name: 'PowerTrader DCA (Neural)' },
+  { id: 'DAY_TRADER', name: 'Day Trader (Neural + SL/TP)' },
   { id: 'SENTIMENT', name: 'Sentiment + RSI' },
 ];
 

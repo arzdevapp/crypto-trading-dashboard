@@ -17,6 +17,9 @@ const STRATEGY_DEFAULTS: Record<string, Record<string, number | boolean | string
   MACD: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, quantity: 0.001 },
   BOLLINGER: { period: 20, stdDev: 2, quantity: 0.001 },
   GRID: { lowerPrice: 0, upperPrice: 0, gridLevels: 10, quantity: 0.001 },
+  POWER_TRADER: { tradeStartLevel: 3, quantity: 0.001, pmStartPct: 5, pmStartPctDCA: 2.5 },
+  DAY_TRADER: { quantity: 0.001, stopLossPct: 1.0, takeProfitPct: 0.8, trailingGapPct: 0.3, entrySignalMin: 3, maxTradesPerDay: 5, newsBlockThresh: -0.4 },
+  SENTIMENT: { rsiPeriod: 14, rsiOversold: 40, quantity: 0.001 },
 };
 
 export function StrategyForm({ exchangeId }: { exchangeId: string }) {

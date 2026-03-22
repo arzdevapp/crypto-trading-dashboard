@@ -6,7 +6,11 @@ import { getPredictor } from '../ml/InstancePredictor';
 import { getNewsSentiment } from '../news/NewsSentimentScorer';
 import type { Signal, StrategyStatus } from '@/types/strategy';
 import type { BaseStrategy } from './BaseStrategy';
-import type { PowerTraderStrategy } from './implementations/PowerTraderStrategy';
+// Shared interface for strategies that accept injected neural + news signals
+interface NeuralAwareStrategy {
+  setNeuralLevels(long: number, short: number): void;
+  setNewsSentiment(score: number, label: string): void;
+}
 
 interface RunnerState {
   strategyId: string;
@@ -51,19 +55,19 @@ export async function startStrategy(strategyId: string): Promise<void> {
       const candles = await adapter.fetchOHLCV(record.symbol, record.timeframe, 2);
       if (!candles.length) return;
 
-      // Inject live neural signals + news sentiment into PowerTrader before each candle
-      if (record.type === 'POWER_TRADER') {
+      // Inject live neural signals + news sentiment into PowerTrader / DayTrader before each candle
+      if (record.type === 'POWER_TRADER' || record.type === 'DAY_TRADER') {
         try {
           const predictor = await getPredictor(record.symbol);
           const ticker = await adapter.fetchTicker(record.symbol);
           const candles1h = record.timeframe === '1h' ? candles : await adapter.fetchOHLCV(record.symbol, '1h', 3);
           const signals = predictor.aggregateSignals(candles1h, ticker.last);
-          (strategy as unknown as PowerTraderStrategy).setNeuralLevels(signals.maxLongSignal, signals.maxShortSignal);
+          (strategy as unknown as NeuralAwareStrategy).setNeuralLevels(signals.maxLongSignal, signals.maxShortSignal);
         } catch { /* non-fatal — strategy keeps last known levels */ }
 
         try {
           const sentiment = await getNewsSentiment(record.symbol);
-          (strategy as unknown as PowerTraderStrategy).setNewsSentiment(sentiment.score, sentiment.label);
+          (strategy as unknown as NeuralAwareStrategy).setNewsSentiment(sentiment.score, sentiment.label);
         } catch { /* non-fatal */ }
       }
 

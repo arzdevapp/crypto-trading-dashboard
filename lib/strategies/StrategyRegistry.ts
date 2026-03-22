@@ -6,6 +6,7 @@ import { BollingerBandsStrategy } from './implementations/BollingerBandsStrategy
 import { GridTradingStrategy } from './implementations/GridTradingStrategy';
 import { SentimentStrategy } from './implementations/SentimentStrategy';
 import { PowerTraderStrategy } from './implementations/PowerTraderStrategy';
+import { DayTraderStrategy } from './implementations/DayTraderStrategy';
 
 type StrategyConstructor = new (config: Record<string, unknown>) => BaseStrategy;
 
@@ -17,6 +18,7 @@ const registry = new Map<string, StrategyConstructor>([
   ['GRID', GridTradingStrategy as unknown as StrategyConstructor],
   ['SENTIMENT', SentimentStrategy as unknown as StrategyConstructor],
   ['POWER_TRADER', PowerTraderStrategy as unknown as StrategyConstructor],
+  ['DAY_TRADER', DayTraderStrategy as unknown as StrategyConstructor],
 ]);
 
 export function createStrategy(type: string, config: Record<string, unknown>): BaseStrategy {

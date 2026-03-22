@@ -13,6 +13,34 @@ interface PresetStrategy {
 }
 
 const PRESETS: PresetStrategy[] = [
+  // ─── DAY TRADER PRESETS ───────────────────────────────────────────
+  {
+    name: 'Day Trader — BTC/USDT (Conservative)',
+    type: 'DAY_TRADER',
+    symbol: 'BTC/USDT',
+    timeframe: '5m',
+    config: { quantity: 0.001, stopLossPct: 1.0, takeProfitPct: 0.8, trailingGapPct: 0.3, entrySignalMin: 4, maxTradesPerDay: 5, newsBlockThresh: -0.4 },
+    description: 'Neural day trader on BTC 5m. Hard 1% stop loss, 0.8% take profit with trailing. Max 5 trades/day.',
+    tier: 'best',
+  },
+  {
+    name: 'Day Trader — ETH/USDT (Aggressive)',
+    type: 'DAY_TRADER',
+    symbol: 'ETH/USDT',
+    timeframe: '5m',
+    config: { quantity: 0.01, stopLossPct: 1.5, takeProfitPct: 1.0, trailingGapPct: 0.4, entrySignalMin: 3, maxTradesPerDay: 8, newsBlockThresh: -0.3 },
+    description: 'Aggressive ETH day trader. Wider SL/TP for volatile ETH moves, up to 8 trades/day.',
+    tier: 'good',
+  },
+  {
+    name: 'Day Trader — SOL/USDT (Scalp)',
+    type: 'DAY_TRADER',
+    symbol: 'SOL/USDT',
+    timeframe: '1m',
+    config: { quantity: 0.1, stopLossPct: 0.8, takeProfitPct: 0.5, trailingGapPct: 0.2, entrySignalMin: 3, maxTradesPerDay: 10, newsBlockThresh: -0.3 },
+    description: 'Fast scalper on SOL 1m. Tight 0.8% SL, 0.5% TP, high frequency up to 10 trades/day.',
+    tier: 'good',
+  },
   // ─── TIER 1: BEST ────────────────────────────────────────────────
   {
     name: 'PowerTrader DCA — BTC/USDT',
