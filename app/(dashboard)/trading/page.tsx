@@ -20,10 +20,10 @@ export default function TradingPage() {
   }
 
   return (
-    <div className="h-full flex gap-2 p-2" style={{ background: '#070B10' }}>
+    <div className="h-full flex flex-col xl:flex-row gap-2 p-2 overflow-y-auto xl:overflow-hidden" style={{ background: '#070B10' }}>
 
       {/* Left panel — symbol + order form */}
-      <div className="flex flex-col gap-2 w-56 flex-shrink-0">
+      <div className="flex flex-col gap-2 xl:w-56 flex-shrink-0">
 
         {/* Symbol selector */}
         <div className="rounded-lg border overflow-hidden flex-shrink-0" style={{ background: '#0E1626', borderColor: '#243044' }}>
@@ -53,7 +53,7 @@ export default function TradingPage() {
         </div>
 
         {/* Order form */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="xl:flex-1 xl:min-h-0 overflow-y-auto">
           <OrderForm exchangeId={activeExchangeId} symbol={selectedSymbol} />
         </div>
 
@@ -62,13 +62,13 @@ export default function TradingPage() {
       {/* Right panel — chart + open orders */}
       <div className="flex-1 min-w-0 flex flex-col gap-2">
 
-        {/* Chart fills available space */}
-        <div className="flex-1 min-h-0">
+        {/* Chart */}
+        <div className="h-[350px] xl:h-auto xl:flex-1 xl:min-h-0">
           <PriceChart exchangeId={activeExchangeId} symbol={selectedSymbol} />
         </div>
 
-        {/* Open orders — compact, max height capped */}
-        <div className="flex-shrink-0 max-h-[160px] overflow-hidden">
+        {/* Open orders */}
+        <div className="flex-shrink-0 max-h-[160px] overflow-auto">
           <OpenOrdersList exchangeId={activeExchangeId} symbol={selectedSymbol} />
         </div>
 

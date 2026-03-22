@@ -35,7 +35,7 @@ export function Header() {
         </Button>
         {exchanges.length > 0 ? (
           <Select value={activeExchangeId ?? ''} onValueChange={setActiveExchangeId}>
-            <SelectTrigger className="w-44 h-8 text-xs">
+            <SelectTrigger className="w-32 xl:w-44 h-8 text-xs">
               <SelectValue placeholder="Select exchange" />
             </SelectTrigger>
             <SelectContent>

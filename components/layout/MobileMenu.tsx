@@ -33,6 +33,7 @@ export function MobileMenu() {
           left: 0,
           bottom: 0,
           width: '16rem',
+          maxWidth: 'calc(100% - 2rem)',
           zIndex: 10000,
           background: '#0E1626',
           borderRight: '1px solid #243044',

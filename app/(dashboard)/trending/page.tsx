@@ -139,16 +139,13 @@ export default function TrendingPage() {
       >
         {/* Column headers */}
         <div
-          className="grid gap-x-3 px-4 py-2 border-b flex-shrink-0 items-center"
-          style={{ borderColor: '#243044', gridTemplateColumns: '2fr 1fr 90px 90px 100px 100px 60px' }}
+          className="grid gap-x-2 xl:gap-x-3 px-2 xl:px-4 py-2 border-b flex-shrink-0 items-center"
+          style={{ borderColor: '#243044', gridTemplateColumns: '1fr auto auto auto' }}
         >
           <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: '#243044' }}>Coin</span>
           <ColHeader col="price"     label="Price" />
-          <div className="flex justify-end"><ColHeader col="change24h" label="24h" /></div>
-          <div className="flex justify-end"><ColHeader col="change7d"  label="7d" /></div>
-          <div className="flex justify-center"><ColHeader col="safety" label="Safety" /></div>
-          <div className="flex justify-end"><ColHeader col="signal"   label="Signal" /></div>
-          <span className="font-mono text-[9px] uppercase tracking-widest text-right" style={{ color: '#243044' }}>Trade</span>
+          <ColHeader col="change24h" label="24h" />
+          <ColHeader col="signal"   label="Signal" />
         </div>
 
         {/* Rows */}
@@ -168,67 +165,39 @@ export default function TrendingPage() {
             return (
               <div
                 key={coin.id}
-                className="grid gap-x-3 px-4 py-3 hover:bg-[#121C2F] transition-colors items-center group"
-                style={{ gridTemplateColumns: '2fr 1fr 90px 90px 100px 100px 60px' }}
+                className="grid gap-x-2 xl:gap-x-3 px-2 xl:px-4 py-3 hover:bg-[#121C2F] transition-colors items-center group cursor-pointer"
+                style={{ gridTemplateColumns: '1fr auto auto auto' }}
                 title={`${coin.signalReason}\n\nSafety: ${coin.safety.label} (${coin.safety.score}/100)\n${coin.safety.reasons.join(' · ')}`}
+                onClick={() => openForTrading(coin)}
               >
-                {/* Rank + Coin — clicking row sets symbol on dashboard */}
-                <button
-                  className="flex items-center gap-2 min-w-0 text-left"
-                  onClick={() => setSelectedSymbol(coin.tradingPair)}
-                >
+                {/* Rank + Coin */}
+                <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-[9px] font-mono w-4 text-right flex-shrink-0" style={{ color: '#243044' }}>{idx + 1}</span>
                   <span className="text-xs font-mono font-bold truncate" style={{ color: '#C7D1DB' }}>{coin.symbol}</span>
-                  <span className="text-[9px] font-mono truncate hidden sm:block" style={{ color: '#8B949E' }}>{coin.name}</span>
                   {coin.isTrending && (
                     <Flame className="w-3 h-3 flex-shrink-0" style={{ color: '#f97316' }} />
                   )}
-                </button>
+                  <div
+                    className="w-1.5 h-1.5 rounded-full flex-shrink-0 xl:hidden"
+                    style={{ background: safeColor }}
+                  />
+                </div>
 
                 {/* Price */}
-                <span className="text-xs font-mono" style={{ color: '#C7D1DB' }}>{formatPrice(coin.price)}</span>
+                <span className="text-[10px] xl:text-xs font-mono" style={{ color: '#C7D1DB' }}>{formatPrice(coin.price)}</span>
 
                 {/* 24h */}
-                <span className="text-[10px] font-mono font-bold text-right" style={{ color: changeColor24 }}>
+                <span className="text-[10px] font-mono font-bold" style={{ color: changeColor24 }}>
                   {coin.change24h >= 0 ? '+' : ''}{coin.change24h.toFixed(1)}%
                 </span>
 
-                {/* 7d */}
-                <span className="text-[10px] font-mono text-right" style={{ color: changeColor7d }}>
-                  {coin.change7d >= 0 ? '+' : ''}{coin.change7d.toFixed(1)}%
-                </span>
-
-                {/* Safety */}
-                <div className="flex items-center justify-center gap-1.5">
-                  <div
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ background: safeColor, boxShadow: `0 0 5px ${safeColor}80` }}
-                  />
-                  <span className="text-[9px] font-mono" style={{ color: safeColor }}>{coin.safety.label}</span>
-                </div>
-
                 {/* Signal */}
-                <div className="flex justify-end">
-                  <span
-                    className="text-[9px] font-mono font-bold px-2 py-0.5 rounded"
-                    style={{ color: sig.color, background: sig.bg }}
-                  >
-                    {sig.label}
-                  </span>
-                </div>
-
-                {/* Trade button */}
-                <div className="flex justify-end">
-                  <button
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-mono font-bold transition-all opacity-0 group-hover:opacity-100 hover:scale-105"
-                    style={{ background: '#00FF6620', color: '#00FF66', border: '1px solid #00FF6640' }}
-                    onClick={() => openForTrading(coin)}
-                    title={`Open ${coin.tradingPair} in Trading`}
-                  >
-                    <Zap className="w-2.5 h-2.5" />
-                    TRADE
-                  </button>
-                </div>
+                <span
+                  className="text-[8px] xl:text-[9px] font-mono font-bold px-1.5 xl:px-2 py-0.5 rounded"
+                  style={{ color: sig.color, background: sig.bg }}
+                >
+                  {sig.label}
+                </span>
               </div>
             );
           })}

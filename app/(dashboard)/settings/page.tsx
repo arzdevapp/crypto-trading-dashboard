@@ -66,10 +66,10 @@ export default function SettingsPage() {
   });
 
   return (
-    <div className="h-full flex gap-2 p-2" style={{ background: '#070B10' }}>
+    <div className="h-full flex flex-col xl:flex-row gap-2 p-2 overflow-y-auto xl:overflow-hidden" style={{ background: '#070B10' }}>
 
       {/* Left: connected exchanges */}
-      <div className="flex-1 min-w-0 flex flex-col gap-2 overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col gap-2 overflow-hidden order-2 xl:order-1">
         <div className="rounded-lg border flex flex-col flex-1 min-h-0 overflow-hidden" style={{ background: '#0E1626', borderColor: '#243044' }}>
           <div className="flex items-center gap-2 px-3 py-2 border-b flex-shrink-0" style={{ borderColor: '#243044', background: '#070B10' }}>
             <Plug className="w-3.5 h-3.5" style={{ color: '#00E5FF' }} />
@@ -110,8 +110,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Right: add exchange form */}
-      <div className="w-72 flex-shrink-0">
+      {/* Right: add exchange form — on mobile shows first */}
+      <div className="xl:w-72 flex-shrink-0 order-1 xl:order-2">
         <div className="rounded-lg border overflow-hidden" style={{ background: '#0E1626', borderColor: '#243044' }}>
           <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: '#243044', background: '#070B10' }}>
             <Settings className="w-3.5 h-3.5" style={{ color: '#00E5FF' }} />

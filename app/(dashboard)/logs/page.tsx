@@ -55,7 +55,7 @@ export default function LogsPage() {
     <div className="h-full flex flex-col p-2 gap-2" style={{ background: '#070B10' }}>
 
       {/* Header */}
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
         <Terminal className="w-4 h-4" style={{ color: '#00FF66' }} />
         <span className="text-sm font-mono font-bold tracking-widest uppercase" style={{ color: '#00FF66' }}>
           System Logs
@@ -120,7 +120,7 @@ export default function LogsPage() {
       >
         {/* Column headers */}
         <div
-          className="grid gap-2 px-3 py-1.5 border-b flex-shrink-0 font-mono text-[9px] uppercase tracking-widest"
+          className="hidden xl:grid gap-2 px-3 py-1.5 border-b flex-shrink-0 font-mono text-[9px] uppercase tracking-widest"
           style={{ borderColor: '#243044', color: '#243044', gridTemplateColumns: '70px 60px 160px 1fr' }}
         >
           <span>Time</span>
@@ -161,8 +161,9 @@ function LogRow({ entry }: { entry: SystemLog }) {
       style={{ borderColor: '#1a2538' }}
       onClick={() => setOpen(o => !o)}
     >
+      {/* Desktop row */}
       <div
-        className="grid gap-2 px-3 py-1.5 font-mono text-[10px] items-start"
+        className="hidden xl:grid gap-2 px-3 py-1.5 font-mono text-[10px] items-start"
         style={{ gridTemplateColumns: '70px 60px 160px 1fr' }}
       >
         <span style={{ color: '#8B949E' }}>{fmt(entry.createdAt)}</span>
@@ -174,6 +175,19 @@ function LogRow({ entry }: { entry: SystemLog }) {
         </span>
         <span className="truncate" style={{ color: '#8B949E' }}>{entry.source}</span>
         <span style={{ color: '#C7D1DB' }}>{entry.message}</span>
+      </div>
+      {/* Mobile row */}
+      <div className="xl:hidden px-3 py-2 font-mono text-[10px]">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span
+            className="text-[8px] px-1 py-0.5 rounded font-bold"
+            style={{ color: style.color, background: style.bg }}
+          >
+            {style.label}
+          </span>
+          <span style={{ color: '#8B949E' }}>{fmt(entry.createdAt)}</span>
+        </div>
+        <div className="truncate" style={{ color: '#C7D1DB' }}>{entry.message}</div>
       </div>
       {open && entry.meta && (
         <pre

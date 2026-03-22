@@ -10,10 +10,10 @@ export default function BacktestingPage() {
   const [results, setResults] = useState<BacktestMetrics | null>(null);
 
   return (
-    <div className="h-full flex gap-2 p-2" style={{ background: '#070B10' }}>
+    <div className="h-full flex flex-col xl:flex-row gap-2 p-2 overflow-y-auto xl:overflow-hidden" style={{ background: '#070B10' }}>
 
-      {/* Left: form — fixed width, scrollable */}
-      <div className="w-64 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
+      {/* Left: form — fixed width on desktop, full on mobile */}
+      <div className="xl:w-64 flex-shrink-0 flex flex-col gap-2 xl:overflow-y-auto">
         <div className="flex items-center gap-2 flex-shrink-0 px-1">
           <FlaskConical className="w-3.5 h-3.5" style={{ color: '#00E5FF' }} />
           <span className="text-[11px] font-mono font-bold tracking-widest uppercase" style={{ color: '#00E5FF' }}>Backtesting</span>
