@@ -194,7 +194,7 @@ function LogRow({ entry }: { entry: SystemLog }) {
           className="mx-3 mb-2 p-2 rounded text-[9px] font-mono overflow-x-auto"
           style={{ background: '#070B10', color: '#00E5FF', border: '1px solid #243044' }}
         >
-          {JSON.stringify(JSON.parse(entry.meta), null, 2)}
+          {(() => { try { return JSON.stringify(JSON.parse(entry.meta), null, 2); } catch { return entry.meta; } })()}
         </pre>
       )}
     </div>

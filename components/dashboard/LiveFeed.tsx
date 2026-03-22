@@ -31,7 +31,7 @@ export function LiveFeed() {
     staleTime: 25000,
   });
 
-  const trades: Trade[] = data?.trades ?? [];
+  const trades: Trade[] = Array.isArray(data?.trades) ? data.trades : [];
 
   return (
     <div className="rounded-lg border overflow-hidden" style={{ background: '#0E1626', borderColor: '#243044' }}>

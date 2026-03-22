@@ -44,7 +44,7 @@ function SourceBar({ label, value }: { label: string; value: number }) {
 }
 
 export function NewsSentimentWidget({ symbol }: { symbol: string }) {
-  const { data, isLoading } = useQuery<SentimentSignal>({
+  const { data, isLoading, isError } = useQuery<SentimentSignal>({
     queryKey: ['news-sentiment', symbol],
     queryFn: () => fetch(`/api/news/sentiment?symbol=${encodeURIComponent(symbol)}`).then(r => r.json()),
     refetchInterval: 15 * 60 * 1000,
@@ -69,6 +69,9 @@ export function NewsSentimentWidget({ symbol }: { symbol: string }) {
       <div className="p-3 space-y-3">
         {isLoading && (
           <p className="text-[9px] font-mono text-center" style={{ color: '#8B949E' }}>Loading sentiment…</p>
+        )}
+        {isError && (
+          <p className="text-[9px] font-mono text-center" style={{ color: '#ef4444' }}>Failed to load sentiment</p>
         )}
 
         {data && (

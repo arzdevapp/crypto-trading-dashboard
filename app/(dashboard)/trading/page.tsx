@@ -12,10 +12,15 @@ export default function TradingPage() {
 
   const { data: ticker } = useQuery<{ last: number; change24h: number; percentage: number }>({
     queryKey: ['ticker', activeExchangeId, selectedSymbol],
-    queryFn: () => fetch(`/api/exchanges/${activeExchangeId}/ticker/${encodeURIComponent(selectedSymbol)}`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/exchanges/${activeExchangeId}/ticker/${encodeURIComponent(selectedSymbol)}`);
+      if (!r.ok) throw new Error('Ticker fetch failed');
+      return r.json();
+    },
     enabled: !!activeExchangeId,
     refetchInterval: 10000,
     staleTime: 9000,
+    retry: 1,
   });
 
   if (!activeExchangeId) {

@@ -38,7 +38,7 @@ export function TradeHistoryTable() {
               <ChevronLeft className="w-3 h-3" />
             </Button>
             <span className="text-xs text-muted-foreground">{page + 1}/{Math.max(totalPages, 1)}</span>
-            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages - 1}>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= totalPages}>
               <ChevronRight className="w-3 h-3" />
             </Button>
           </div>

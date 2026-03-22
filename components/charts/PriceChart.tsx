@@ -105,13 +105,17 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
           `/api/exchanges/${exchangeId}/ohlcv?symbol=${encodeURIComponent(symbol)}&timeframe=${selectedTimeframe}&limit=${limit}`,
           { signal: controller.signal }
         );
-        const candles: { timestamp: number; open: number; high: number; low: number; close: number }[] = await res.json();
+        const raw = await res.json();
         if (!candleSeriesRef.current || !chartRef.current) return;
+        if (!Array.isArray(raw)) return;
 
-        const data: CandlestickData[] = candles.map((c) => ({
-          time: Math.floor(c.timestamp / 1000) as Time,
-          open: c.open, high: c.high, low: c.low, close: c.close,
-        }));
+        const candles: { timestamp: number; open: number; high: number; low: number; close: number }[] = raw;
+        const data: CandlestickData[] = candles
+          .filter(c => c && typeof c.timestamp === 'number')
+          .map((c) => ({
+            time: Math.floor(c.timestamp / 1000) as Time,
+            open: c.open, high: c.high, low: c.low, close: c.close,
+          }));
 
         if (full) {
           lastCandleDataRef.current = data;
