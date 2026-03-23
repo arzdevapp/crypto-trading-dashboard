@@ -106,6 +106,8 @@ export default function DCABotPage() {
   const [timeframe, setTimeframe] = useState('1h');
   const [tradeStartLevel, setTradeStartLevel] = useState('3');
   const [quantity, setQuantity] = useState('0.001');
+  const [budgetUsdt, setBudgetUsdt] = useState('');
+  const [budgetMode, setBudgetMode] = useState<'usdt' | 'qty'>('qty');
   const [pmStartPct, setPmStartPct] = useState('5');
   const [indicators, setIndicators] = useState<ActiveIndicators>({});
   const queryClient = useQueryClient();
@@ -325,18 +327,95 @@ export default function DCABotPage() {
             />
           </div>
 
-          <div>
-            <div className="flex items-center justify-between">
-              <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Order Size</Label>
-              <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>{selectedSymbol.split('/')[0]}</span>
+          {/* Budget / Order Size */}
+          <div className="space-y-2">
+            {/* Mode toggle */}
+            <div className="flex items-center gap-0 rounded overflow-hidden border" style={{ borderColor: '#243044' }}>
+              <button
+                className="flex-1 text-[9px] font-mono font-bold py-1 transition-colors"
+                style={{
+                  background: budgetMode === 'usdt' ? '#00E5FF20' : '#121C2F',
+                  color: budgetMode === 'usdt' ? '#00E5FF' : '#6b7280',
+                }}
+                onClick={() => !running && setBudgetMode('usdt')}
+                disabled={running}
+              >
+                $ USDT BUDGET
+              </button>
+              <button
+                className="flex-1 text-[9px] font-mono font-bold py-1 transition-colors"
+                style={{
+                  background: budgetMode === 'qty' ? '#00E5FF20' : '#121C2F',
+                  color: budgetMode === 'qty' ? '#00E5FF' : '#6b7280',
+                }}
+                onClick={() => !running && setBudgetMode('qty')}
+                disabled={running}
+              >
+                QTY ({selectedSymbol.split('/')[0]})
+              </button>
             </div>
-            <Input
-              className="h-7 mt-1 text-xs font-mono"
-              type="number" step="0.0001"
-              value={quantity}
-              onChange={e => setQuantity(e.target.value)}
-              disabled={running}
-            />
+
+            {budgetMode === 'usdt' ? (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Total Budget</Label>
+                  <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>USDT</span>
+                </div>
+                <Input
+                  className="h-7 text-xs font-mono"
+                  type="number" step="10" min="1"
+                  placeholder="e.g. 500"
+                  value={budgetUsdt}
+                  onChange={e => {
+                    setBudgetUsdt(e.target.value);
+                    const budget = parseFloat(e.target.value);
+                    if (budget > 0 && currentPrice > 0) {
+                      const perTradeQty = (budget / 7) / currentPrice;
+                      setQuantity(perTradeQty.toFixed(6));
+                    }
+                  }}
+                  disabled={running}
+                />
+                {budgetUsdt && currentPrice > 0 && (
+                  <div className="mt-1.5 space-y-0.5">
+                    <div className="flex justify-between text-[9px] font-mono">
+                      <span style={{ color: '#6b7280' }}>Per trade</span>
+                      <span style={{ color: '#9ca3af' }}>{quantity} {selectedSymbol.split('/')[0]} ≈ ${(parseFloat(quantity) * currentPrice).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-[9px] font-mono">
+                      <span style={{ color: '#6b7280' }}>Max exposure (×7)</span>
+                      <span style={{ color: '#f59e0b' }}>${parseFloat(budgetUsdt).toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Order Size per trade</Label>
+                  <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>{selectedSymbol.split('/')[0]}</span>
+                </div>
+                <Input
+                  className="h-7 text-xs font-mono"
+                  type="number" step="0.0001"
+                  value={quantity}
+                  onChange={e => setQuantity(e.target.value)}
+                  disabled={running}
+                />
+                {parseFloat(quantity) > 0 && currentPrice > 0 && (
+                  <div className="mt-1.5 space-y-0.5">
+                    <div className="flex justify-between text-[9px] font-mono">
+                      <span style={{ color: '#6b7280' }}>Per trade value</span>
+                      <span style={{ color: '#9ca3af' }}>≈ ${(parseFloat(quantity) * currentPrice).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-[9px] font-mono">
+                      <span style={{ color: '#6b7280' }}>Max exposure (×7)</span>
+                      <span style={{ color: '#f59e0b' }}>≈ ${(parseFloat(quantity) * 7 * currentPrice).toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
