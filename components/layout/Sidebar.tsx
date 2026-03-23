@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import {
-  LayoutDashboard, TrendingUp, Bot, FlaskConical, History, Settings, ChevronLeft, ChevronRight, Zap, Brain, Terminal, Flame, RefreshCw, Check, AlertCircle
+  LayoutDashboard, TrendingUp, Bot, FlaskConical, History, Settings, ChevronLeft, ChevronRight, Zap, Brain, Terminal, Flame, RefreshCw, Check, AlertCircle, SquareTerminal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
@@ -20,6 +20,7 @@ export const navItems = [
   { href: '/backtesting', label: 'Backtesting', icon: FlaskConical },
   { href: '/history', label: 'History', icon: History },
   { href: '/logs', label: 'Logs', icon: Terminal },
+  { href: '/console', label: 'Console', icon: SquareTerminal },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
