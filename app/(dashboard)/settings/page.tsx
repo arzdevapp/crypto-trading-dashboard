@@ -131,7 +131,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Right: add exchange form — on mobile shows first */}
-      <div className="xl:w-72 flex-shrink-0 order-1 xl:order-2 flex flex-col gap-2">
+      <div className="xl:w-72 flex-shrink-0 order-1 xl:order-2 flex flex-col gap-2 xl:overflow-y-auto">
         <div className="rounded-lg border overflow-hidden" style={{ background: '#0E1626', borderColor: '#243044' }}>
           <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: '#243044', background: '#070B10' }}>
             <Settings className="w-3.5 h-3.5" style={{ color: '#00E5FF' }} />
