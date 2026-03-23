@@ -3,6 +3,7 @@ import { useBalance } from '@/hooks/usePortfolio';
 import { useStore } from '@/store';
 import { useQuery } from '@tanstack/react-query';
 import { Wallet, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface WalletPanelProps {
   /** If provided, % buttons call this so the parent can fill an input */
@@ -15,6 +16,8 @@ const PCT_STEPS = [25, 50, 75, 100] as const;
 
 export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) {
   const { activeExchangeId, selectedSymbol } = useStore();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const quoteAsset = selectedSymbol.split('/')[1] ?? 'USDT';
   const baseAsset  = selectedSymbol.split('/')[0];
 
@@ -63,10 +66,12 @@ export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) 
     onSelectPct(pct, allocBase, allocQuote);
   };
 
-  if (!activeExchangeId) {
+  if (!mounted || !activeExchangeId) {
     return (
       <div className="rounded-lg border px-3 py-3" style={{ background: '#0E1626', borderColor: '#243044' }}>
-        <p className="text-[10px] font-mono text-center" style={{ color: '#374151' }}>Select an exchange to view wallet</p>
+        <p className="text-[10px] font-mono text-center" style={{ color: '#374151' }}>
+          {mounted ? 'Select an exchange to view wallet' : ''}
+        </p>
       </div>
     );
   }
