@@ -87,7 +87,7 @@ export default function SettingsPage() {
   });
 
   const formsPanel = (
-    <div className="h-full flex flex-col gap-2 p-2 overflow-y-auto" style={{ background: '#070B10' }}>
+    <div className="flex flex-col gap-2 p-2" style={{ background: '#070B10' }}>
       {/* Add Exchange */}
       <div className="rounded-lg border overflow-hidden flex-shrink-0" style={{ background: '#0E1626', borderColor: '#243044' }}>
         <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: '#243044', background: '#070B10' }}>
@@ -239,7 +239,7 @@ export default function SettingsPage() {
       {/* Mobile: stack vertically */}
       <div className="xl:hidden h-full overflow-y-auto p-2 space-y-2" style={{ background: '#070B10' }}>
         {formsPanel}
-        {exchangesPanel}
+        <div className="h-[400px]">{exchangesPanel}</div>
       </div>
       {/* Desktop: resizable split */}
       <div className="hidden xl:block h-full">
