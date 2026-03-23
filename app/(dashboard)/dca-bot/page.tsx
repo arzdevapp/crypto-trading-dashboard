@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PriceChart } from '@/components/charts/PriceChart';
+import { PriceChart, type ActiveIndicators } from '@/components/charts/PriceChart';
 import { NeuralLevelsOverlay } from '@/components/charts/NeuralLevelsOverlay';
 import { SymbolSelector } from '@/components/trading/SymbolSelector';
 import { useStore } from '@/store';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Brain, RefreshCw, Zap, Square, Activity, Eye, Trash2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { NewsSentimentWidget } from '@/components/news/NewsSentimentWidget';
+import { HorizontalSplit } from '@/components/ui/resizable';
 import { PageHelp } from '@/components/ui/page-help';
 import { formatCurrency, formatCrypto, formatPercent } from '@/lib/utils';
 
@@ -106,6 +107,7 @@ export default function DCABotPage() {
   const [tradeStartLevel, setTradeStartLevel] = useState('3');
   const [quantity, setQuantity] = useState('0.001');
   const [pmStartPct, setPmStartPct] = useState('5');
+  const [indicators, setIndicators] = useState<ActiveIndicators>({});
   const queryClient = useQueryClient();
 
   const handleLevelsUpdate = useCallback((long: number[], short: number[]) => {
@@ -236,11 +238,8 @@ export default function DCABotPage() {
   const longSignalCount = longLevels.length;
   const shortSignalCount = shortLevels.length;
 
-  return (
-    <div className="h-full flex flex-col xl:flex-row gap-0 overflow-y-auto xl:overflow-hidden" style={{ background: '#070B10' }}>
-
-      {/* ── Left sidebar ── */}
-      <div className="flex flex-col gap-0 xl:w-60 flex-shrink-0 xl:overflow-y-auto xl:border-r" style={{ borderColor: '#1a2538' }}>
+  const sidebarContent = (
+      <div className="flex flex-col gap-0 h-full overflow-y-auto">
 
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0" style={{ borderColor: '#1a2538', background: '#070B10' }}>
@@ -340,6 +339,40 @@ export default function DCABotPage() {
           </div>
         </div>
 
+        {/* Chart Indicators */}
+        <div className="px-3 py-3 border-b flex-shrink-0 space-y-2" style={{ borderColor: '#1a2538' }}>
+          <div className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Chart Indicators</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {([
+              { key: 'ema9', label: 'EMA 9', color: '#f59e0b' },
+              { key: 'ema21', label: 'EMA 21', color: '#8b5cf6' },
+              { key: 'sma50', label: 'SMA 50', color: '#06b6d4' },
+              { key: 'sma200', label: 'SMA 200', color: '#ec4899' },
+              { key: 'bollinger', label: 'Bollinger', color: '#6366f1' },
+            ] as const).map(({ key, label, color }) => {
+              const active = !!indicators[key];
+              return (
+                <button
+                  key={key}
+                  onClick={() => setIndicators(prev => ({ ...prev, [key]: !prev[key] }))}
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all"
+                  style={{
+                    background: active ? `${color}20` : '#0d1220',
+                    border: `1px solid ${active ? `${color}60` : '#1e2d45'}`,
+                    color: active ? color : '#4b5563',
+                  }}
+                >
+                  <div
+                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                    style={{ background: active ? color : '#1e2d45' }}
+                  />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Start / Stop */}
         <div className="px-3 py-3 border-b flex-shrink-0" style={{ borderColor: '#1a2538' }}>
           {running ? (
@@ -407,9 +440,10 @@ export default function DCABotPage() {
           </div>
         </div>
       </div>
+  );
 
-      {/* ── Right panel: chart + position dashboard ── */}
-      <div className="flex-1 min-w-0 flex flex-col">
+  const rightContent = (
+      <div className="flex flex-col h-full min-w-0">
 
         {/* Live price ticker bar */}
         <div className="flex items-center gap-4 px-4 py-2 border-b flex-shrink-0 flex-wrap gap-y-1" style={{ borderColor: '#1a2538', background: '#070B10' }}>
@@ -481,6 +515,7 @@ export default function DCABotPage() {
             symbol={selectedSymbol}
             longLevels={longLevels}
             shortLevels={shortLevels}
+            indicators={indicators}
             overlay={
               <NeuralLevelsOverlay
                 exchangeId={activeExchangeId}
@@ -578,6 +613,27 @@ export default function DCABotPage() {
             )}
           </div>
         </div>
+      </div>
+  );
+
+  return (
+    <div className="h-full" style={{ background: '#070B10' }}>
+      {/* Mobile: stacked, scrollable */}
+      <div className="xl:hidden h-full overflow-y-auto flex flex-col gap-0">
+        {sidebarContent}
+        {rightContent}
+      </div>
+
+      {/* Desktop: resizable horizontal split */}
+      <div className="hidden xl:block h-full">
+        <HorizontalSplit
+          className="h-full"
+          defaultLeftWidth={240}
+          minLeft={200}
+          maxLeft={420}
+          left={sidebarContent}
+          right={rightContent}
+        />
       </div>
     </div>
   );

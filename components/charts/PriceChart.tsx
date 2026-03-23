@@ -6,6 +6,100 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TIMEFRAMES } from '@/lib/constants';
 
+// ── Client-side indicator calculations (pure math) ──
+
+function calcSMA(values: number[], period: number): number[] {
+  if (values.length < period) return [];
+  const result: number[] = [];
+  for (let i = period - 1; i < values.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < period; j++) sum += values[i - j];
+    result.push(sum / period);
+  }
+  return result;
+}
+
+function calcEMA(values: number[], period: number): number[] {
+  if (values.length < period) return [];
+  const k = 2 / (period + 1);
+  const result: number[] = [];
+  let emaVal = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  result.push(emaVal);
+  for (let i = period; i < values.length; i++) {
+    emaVal = values[i] * k + emaVal * (1 - k);
+    result.push(emaVal);
+  }
+  return result;
+}
+
+function calcRSI(values: number[], period = 14): number[] {
+  if (values.length < period + 1) return [];
+  const result: number[] = [];
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = values[i] - values[i - 1];
+    if (diff > 0) gains += diff; else losses -= diff;
+  }
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+  result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  for (let i = period + 1; i < values.length; i++) {
+    const diff = values[i] - values[i - 1];
+    avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
+    result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  }
+  return result;
+}
+
+function calcBollinger(values: number[], period = 20, mult = 2) {
+  const middle = calcSMA(values, period);
+  const upper: number[] = [];
+  const lower: number[] = [];
+  for (let i = period - 1; i < values.length; i++) {
+    const slice = values.slice(i - period + 1, i + 1);
+    const mean = middle[i - (period - 1)];
+    const variance = slice.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / period;
+    const stdDev = Math.sqrt(variance);
+    upper.push(mean + mult * stdDev);
+    lower.push(mean - mult * stdDev);
+  }
+  return { upper, middle, lower };
+}
+
+function calcMACD(values: number[], fastP = 12, slowP = 26, sigP = 9) {
+  const fastEMA = calcEMA(values, fastP);
+  const slowEMA = calcEMA(values, slowP);
+  const offset = slowP - fastP;
+  const macdLine = slowEMA.map((v, i) => fastEMA[i + offset] - v);
+  const signalLine = calcEMA(macdLine, sigP);
+  const sigOffset = macdLine.length - signalLine.length;
+  const histogram = signalLine.map((v, i) => macdLine[i + sigOffset] - v);
+  return { macd: macdLine, signal: signalLine, histogram };
+}
+
+// ── Indicator config ──
+
+export type IndicatorType = 'ema9' | 'ema21' | 'sma50' | 'sma200' | 'bollinger' | 'vwap';
+
+export interface ActiveIndicators {
+  ema9?: boolean;
+  ema21?: boolean;
+  sma50?: boolean;
+  sma200?: boolean;
+  bollinger?: boolean;
+}
+
+const INDICATOR_COLORS: Record<string, string> = {
+  ema9: '#f59e0b',   // amber
+  ema21: '#8b5cf6',  // purple
+  sma50: '#06b6d4',  // cyan
+  sma200: '#ec4899', // pink
+  boll_upper: '#6366f1', // indigo
+  boll_middle: '#6366f1',
+  boll_lower: '#6366f1',
+};
+
 interface PriceChartProps {
   exchangeId: string;
   symbol: string;
@@ -14,13 +108,15 @@ interface PriceChartProps {
   avgCostBasis?: number;
   trailingPMLine?: number;
   overlay?: React.ReactNode;
+  indicators?: ActiveIndicators;
 }
 
-export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = [], avgCostBasis, trailingPMLine, overlay }: PriceChartProps) {
+export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = [], avgCostBasis, trailingPMLine, overlay, indicators }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const levelSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
+  const indicatorSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const { selectedTimeframe, setSelectedTimeframe } = useStore();
   const [loading, setLoading] = useState(true);
   const lastCandleDataRef = useRef<CandlestickData[]>([]);
@@ -88,6 +184,7 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
       chartRef.current = null;
       candleSeriesRef.current = null;
       levelSeriesRef.current = [];
+      indicatorSeriesRef.current = [];
       chart?.remove();
     };
   }, []);
@@ -185,6 +282,76 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
     if (trailingPMLine) addLevelLine(trailingPMLine, '#22c55e'); // green - trailing PM
 
   }, [longLevels, shortLevels, avgCostBasis, trailingPMLine]);
+
+  // ── Draw technical indicator overlays ──
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candles = lastCandleDataRef.current;
+    if (!chart || !candles.length) return;
+
+    // Remove old indicator series
+    for (const s of indicatorSeriesRef.current) {
+      try { chart.removeSeries(s); } catch { /* ignore */ }
+    }
+    indicatorSeriesRef.current = [];
+
+    if (!indicators) return;
+
+    const closes = candles.map(c => c.close);
+    const times = candles.map(c => c.time);
+
+    const addIndicatorLine = (values: number[], offset: number, color: string, lineWidth: number = 1, lineStyle: number = 0) => {
+      if (values.length === 0) return;
+      const series = chart.addSeries(LineSeries, {
+        color,
+        lineWidth: lineWidth as 1 | 2 | 3 | 4,
+        lineStyle,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false,
+      });
+      const data = values.map((v, i) => ({
+        time: times[i + offset],
+        value: v,
+      }));
+      series.setData(data);
+      indicatorSeriesRef.current.push(series);
+    };
+
+    // EMA 9
+    if (indicators.ema9) {
+      const vals = calcEMA(closes, 9);
+      addIndicatorLine(vals, 9 - 1, INDICATOR_COLORS.ema9, 1);
+    }
+
+    // EMA 21
+    if (indicators.ema21) {
+      const vals = calcEMA(closes, 21);
+      addIndicatorLine(vals, 21 - 1, INDICATOR_COLORS.ema21, 1);
+    }
+
+    // SMA 50
+    if (indicators.sma50) {
+      const vals = calcSMA(closes, 50);
+      addIndicatorLine(vals, 50 - 1, INDICATOR_COLORS.sma50, 2);
+    }
+
+    // SMA 200
+    if (indicators.sma200) {
+      const vals = calcSMA(closes, 200);
+      addIndicatorLine(vals, 200 - 1, INDICATOR_COLORS.sma200, 2);
+    }
+
+    // Bollinger Bands
+    if (indicators.bollinger) {
+      const bb = calcBollinger(closes, 20, 2);
+      const bbOffset = 20 - 1;
+      addIndicatorLine(bb.upper, bbOffset, INDICATOR_COLORS.boll_upper, 1, 2);
+      addIndicatorLine(bb.middle, bbOffset, INDICATOR_COLORS.boll_middle, 1, 0);
+      addIndicatorLine(bb.lower, bbOffset, INDICATOR_COLORS.boll_lower, 1, 2);
+    }
+
+  }, [indicators, loading]); // re-run when indicators toggle or new data loads
 
   return (
     <Card className="overflow-hidden h-full min-h-[300px] flex flex-col">

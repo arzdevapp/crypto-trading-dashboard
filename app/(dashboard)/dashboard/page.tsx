@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback } from 'react';
-import { PriceChart } from '@/components/charts/PriceChart';
+import { PriceChart, type ActiveIndicators } from '@/components/charts/PriceChart';
 import { NeuralLevelsOverlay } from '@/components/charts/NeuralLevelsOverlay';
 import { TickerBar } from '@/components/dashboard/TickerBar';
 import { AccountMetrics } from '@/components/dashboard/AccountMetrics';
@@ -10,6 +10,7 @@ import { SentimentPanel } from '@/components/dashboard/SentimentPanel';
 import { StrategyStatusPanel } from '@/components/dashboard/StrategyStatusPanel';
 import { EquityCurveChart } from '@/components/analytics/EquityCurveChart';
 import { BalanceTable } from '@/components/portfolio/BalanceTable';
+import { HorizontalSplit, VerticalSplit } from '@/components/ui/resizable';
 import { useStore } from '@/store';
 import { PageHelp } from '@/components/ui/page-help';
 import { SymbolSearch } from '@/components/dashboard/SymbolSearch';
@@ -24,10 +25,105 @@ export default function DashboardPage() {
     setShortLevels(short);
   }, []);
 
+  // Mobile layout — stacked, scrollable, no resize handles
+  const mobileLayout = (
+    <div className="flex flex-col gap-2 p-2 overflow-y-auto h-full xl:hidden">
+      {/* Chart first on mobile */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <SymbolSearch />
+      </div>
+      <div className="h-[350px] flex-shrink-0">
+        {activeExchangeId ? (
+          <PriceChart
+            exchangeId={activeExchangeId}
+            symbol={selectedSymbol}
+            longLevels={longLevels}
+            shortLevels={shortLevels}
+            overlay={
+              <NeuralLevelsOverlay
+                exchangeId={activeExchangeId}
+                symbol={selectedSymbol}
+                onLevelsUpdate={handleLevelsUpdate}
+              />
+            }
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center rounded-lg border h-full" style={{ borderColor: '#243044', background: '#0E1626' }}>
+            <p className="text-sm font-mono" style={{ color: '#8B949E' }}>SELECT AN EXCHANGE TO VIEW LIVE CHART</p>
+          </div>
+        )}
+      </div>
+      <AccountMetrics />
+      <NeuralSignalMatrix />
+      <StrategyStatusPanel />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <EquityCurveChart />
+        <BalanceTable />
+      </div>
+      <LiveFeed />
+      <SentimentPanel />
+    </div>
+  );
+
+  // Desktop layout — resizable panels
+  const leftSidebar = (
+    <div className="flex flex-col gap-2 h-full overflow-y-auto p-2 pr-0">
+      <AccountMetrics />
+      <NeuralSignalMatrix />
+      <StrategyStatusPanel />
+      <LiveFeed className="flex-1 min-h-0" />
+      <SentimentPanel />
+    </div>
+  );
+
+  const chartArea = (
+    <VerticalSplit
+      className="h-full"
+      defaultBottomHeight={160}
+      minBottom={80}
+      maxBottom={400}
+      top={
+        <div className="flex flex-col h-full gap-2 p-2 pl-0 pb-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <SymbolSearch />
+          </div>
+          <div className="flex-1 min-h-[200px]">
+            {activeExchangeId ? (
+              <PriceChart
+                exchangeId={activeExchangeId}
+                symbol={selectedSymbol}
+                longLevels={longLevels}
+                shortLevels={shortLevels}
+                overlay={
+                  <NeuralLevelsOverlay
+                    exchangeId={activeExchangeId}
+                    symbol={selectedSymbol}
+                    onLevelsUpdate={handleLevelsUpdate}
+                  />
+                }
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-lg border h-full" style={{ borderColor: '#243044', background: '#0E1626' }}>
+                <p className="text-sm font-mono" style={{ color: '#8B949E' }}>SELECT AN EXCHANGE TO VIEW LIVE CHART</p>
+                <p className="text-xs font-mono mt-1" style={{ color: '#374151' }}>Use the exchange selector in the header</p>
+              </div>
+            )}
+          </div>
+        </div>
+      }
+      bottom={
+        <div className="grid grid-cols-2 gap-2 h-full p-2 pl-0 pt-0">
+          <EquityCurveChart />
+          <BalanceTable />
+        </div>
+      }
+    />
+  );
+
   return (
     <div className="flex flex-col h-full" style={{ background: '#070B10' }}>
       {/* Live ticker bar */}
-      <div className="flex items-center">
+      <div className="flex items-center flex-shrink-0">
         <div className="flex-1 min-w-0"><TickerBar /></div>
         <div className="px-2 flex-shrink-0">
           <PageHelp
@@ -45,69 +141,25 @@ export default function DashboardPage() {
               'The chart shows neural buy/short level lines — blue = long zones, orange = short zones.',
               'Equity curve and balances are in the bottom-right grid.',
               'All panels auto-refresh — no need to reload the page.',
+              'Drag the edges between panels to resize them.',
             ]}
           />
         </div>
       </div>
 
-       {/* Main content — fills remaining height */}
-       <div className="flex-1 min-h-0 p-2 overflow-y-auto xl:overflow-hidden">
-         <div className="xl:h-full grid grid-cols-1 xl:grid-cols-4 gap-2 xl:items-start" style={{ gridTemplateRows: undefined }} >
+      {/* Mobile layout */}
+      {mobileLayout}
 
-           {/* Left column — scrollable on desktop, stacks on mobile */}
-           <div className="flex flex-col gap-2 xl:overflow-y-auto xl:min-h-0 xl:h-full pr-0.5 order-2 xl:order-1">
-             <AccountMetrics />
-             <NeuralSignalMatrix />
-             <StrategyStatusPanel />
-             <LiveFeed className="flex-1 min-h-0" />
-             <SentimentPanel />
-           </div>
-
-          {/* Center — 3 cols on desktop, chart-first on mobile */}
-          <div className="xl:col-span-3 flex flex-col gap-2 xl:min-h-0 xl:h-full order-1 xl:order-2">
-            {/* Symbol picker bar */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <SymbolSearch />
-            </div>
-            {/* Chart — fixed height on mobile, flex on desktop */}
-            <div className="h-[350px] xl:h-auto xl:flex-1 xl:min-h-[280px]">
-              {activeExchangeId ? (
-                <PriceChart
-                  exchangeId={activeExchangeId}
-                  symbol={selectedSymbol}
-                  longLevels={longLevels}
-                  shortLevels={shortLevels}
-                  overlay={
-                    <NeuralLevelsOverlay
-                      exchangeId={activeExchangeId}
-                      symbol={selectedSymbol}
-                      onLevelsUpdate={handleLevelsUpdate}
-                    />
-                  }
-                />
-              ) : (
-                <div
-                  className="flex flex-col items-center justify-center rounded-lg border h-full"
-                  style={{ borderColor: '#243044', background: '#0E1626' }}
-                >
-                  <p className="text-sm font-mono" style={{ color: '#8B949E' }}>
-                    SELECT AN EXCHANGE TO VIEW LIVE CHART
-                  </p>
-                  <p className="text-xs font-mono mt-1" style={{ color: '#243044' }}>
-                    Use the exchange selector in the header
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Bottom row — fixed height so it's always visible */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 flex-shrink-0 h-[160px]">
-              <EquityCurveChart />
-              <BalanceTable />
-            </div>
-          </div>
-
-        </div>
+      {/* Desktop layout — resizable */}
+      <div className="flex-1 min-h-0 hidden xl:block">
+        <HorizontalSplit
+          className="h-full"
+          defaultLeftWidth={300}
+          minLeft={200}
+          maxLeft={500}
+          left={leftSidebar}
+          right={chartArea}
+        />
       </div>
     </div>
   );
