@@ -138,11 +138,11 @@ export function HorizontalSplit({
 
   return (
     <div className={`flex ${className}`} style={style}>
-      <div className="flex-shrink-0 min-h-0 overflow-x-hidden overflow-y-auto" style={{ width: leftWidth }}>
+      <div className="flex-shrink-0 min-h-0 overflow-x-hidden overflow-y-auto" style={{ width: leftWidth, height: '100%' }}>
         {left}
       </div>
       <ResizeHandle direction="horizontal" onResize={handleResize} />
-      <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+      <div className="flex-1 min-w-0 min-h-0 overflow-hidden" style={{ height: '100%' }}>
         {right}
       </div>
     </div>
@@ -177,11 +177,11 @@ export function VerticalSplit({
 
   return (
     <div className={`flex flex-col ${className}`} style={style}>
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden" style={{ width: '100%' }}>
         {top}
       </div>
       <ResizeHandle direction="vertical" onResize={handleResize} />
-      <div className="flex-shrink-0 overflow-hidden" style={{ height: bottomHeight }}>
+      <div className="flex-shrink-0 overflow-hidden" style={{ height: bottomHeight, width: '100%' }}>
         {bottom}
       </div>
     </div>
