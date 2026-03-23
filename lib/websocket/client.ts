@@ -67,3 +67,11 @@ export function subscribe(channel: 'ticker' | 'orderbook', symbol: string, excha
 export function unsubscribe(channel: 'ticker' | 'orderbook', symbol: string) {
   sendMessage({ type: 'unsubscribe', channel, symbol });
 }
+
+export function subscribeCandle(symbol: string, timeframe: string, exchangeId: string) {
+  sendMessage({ type: 'subscribe', channel: 'candle', symbol, exchangeId, timeframe });
+}
+
+export function unsubscribeCandle(symbol: string, timeframe: string) {
+  sendMessage({ type: 'unsubscribe', channel: 'candle', symbol, timeframe });
+}

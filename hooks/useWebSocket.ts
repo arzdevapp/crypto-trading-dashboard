@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useCallback } from 'react';
-import { addMessageHandler, subscribe, unsubscribe } from '@/lib/websocket/client';
-import type { WsMessage } from '@/types/websocket';
+import { addMessageHandler, subscribe, unsubscribe, subscribeCandle, unsubscribeCandle } from '@/lib/websocket/client';
+import type { WsMessage, LiveCandle } from '@/types/websocket';
 
 export function useWebSocket(onMessage: (msg: WsMessage) => void) {
   useEffect(() => {
@@ -34,4 +34,24 @@ export function useOrderBook(symbol: string, exchangeId: string, onUpdate: (data
     const remove = addMessageHandler(handler);
     return () => { remove(); unsubscribe('orderbook', symbol); };
   }, [symbol, exchangeId, handler]);
+}
+
+export function useLiveCandle(
+  symbol: string,
+  timeframe: string,
+  exchangeId: string,
+  onCandle: (candle: LiveCandle) => void,
+) {
+  const handler = useCallback((msg: WsMessage) => {
+    if (msg.type === 'candle' && msg.symbol === symbol && msg.timeframe === timeframe) {
+      onCandle(msg.candle);
+    }
+  }, [symbol, timeframe, onCandle]);
+
+  useEffect(() => {
+    if (!symbol || !timeframe || !exchangeId) return;
+    subscribeCandle(symbol, timeframe, exchangeId);
+    const remove = addMessageHandler(handler);
+    return () => { remove(); unsubscribeCandle(symbol, timeframe); };
+  }, [symbol, timeframe, exchangeId, handler]);
 }

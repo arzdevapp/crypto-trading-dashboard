@@ -5,6 +5,7 @@ import { useStore } from '@/store';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TIMEFRAMES } from '@/lib/constants';
+import { useLiveCandle } from '@/hooks/useWebSocket';
 
 // ── Client-side indicator calculations (pure math) ──
 
@@ -201,59 +202,62 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
     };
   }, []);
 
-  // Load candle data + auto-refresh latest candle every 30s
+  // Initial full candle load (REST — 200 candles of history)
   useEffect(() => {
     if (!exchangeId || !symbol) return;
+    const controller = new AbortController();
 
-    const loadCandles = async (controller: AbortController, full = false) => {
+    const loadCandles = async () => {
       if (!candleSeriesRef.current) return;
-      if (full) setLoading(true);
+      setLoading(true);
       try {
-        const limit = full ? 200 : 2;
         const res = await fetch(
-          `/api/exchanges/${exchangeId}/ohlcv?symbol=${encodeURIComponent(symbol)}&timeframe=${selectedTimeframe}&limit=${limit}`,
+          `/api/exchanges/${exchangeId}/ohlcv?symbol=${encodeURIComponent(symbol)}&timeframe=${selectedTimeframe}&limit=200`,
           { signal: controller.signal }
         );
         const raw = await res.json();
         if (!candleSeriesRef.current || !chartRef.current) return;
         if (!Array.isArray(raw)) return;
 
-        const candles: { timestamp: number; open: number; high: number; low: number; close: number }[] = raw;
-        const data: CandlestickData[] = candles
+        const data: CandlestickData[] = (raw as { timestamp: number; open: number; high: number; low: number; close: number }[])
           .filter(c => c && typeof c.timestamp === 'number')
-          .map((c) => ({
+          .map(c => ({
             time: Math.floor(c.timestamp / 1000) as Time,
             open: c.open, high: c.high, low: c.low, close: c.close,
           }));
 
-        if (full) {
-          lastCandleDataRef.current = data;
-          candleSeriesRef.current.setData(data);
-          chartRef.current.timeScale().fitContent();
-        } else {
-          // Update/append latest candle only
-          for (const candle of data) {
-            candleSeriesRef.current.update(candle);
-          }
-        }
+        lastCandleDataRef.current = data;
+        candleSeriesRef.current.setData(data);
+        chartRef.current.timeScale().fitContent();
       } catch (err: unknown) {
         if (err instanceof Error && err.name !== 'AbortError') console.error(err);
       } finally {
-        if (full) setLoading(false);
+        setLoading(false);
       }
     };
 
-    const controller = new AbortController();
-    loadCandles(controller, true);
-
-    // Refresh latest candle every 30s
-    const interval = setInterval(() => loadCandles(controller, false), 30000);
-
-    return () => {
-      controller.abort();
-      clearInterval(interval);
-    };
+    loadCandles();
+    return () => controller.abort();
   }, [exchangeId, symbol, selectedTimeframe]);
+
+  // Live candle updates via WebSocket (replaces 30s REST polling)
+  const handleLiveCandle = useCallback((candle: { time: number; open: number; high: number; low: number; close: number }) => {
+    if (!candleSeriesRef.current) return;
+    const update: CandlestickData = { time: candle.time as Time, open: candle.open, high: candle.high, low: candle.low, close: candle.close };
+    candleSeriesRef.current.update(update);
+    // Keep lastCandleData in sync for indicator recalc
+    const data = lastCandleDataRef.current;
+    if (data.length > 0) {
+      const last = data[data.length - 1];
+      if ((last.time as number) === candle.time) {
+        data[data.length - 1] = update;
+      } else if ((last.time as number) < candle.time) {
+        data.push(update);
+      }
+    }
+  }, []);
+
+  useLiveCandle(symbol, selectedTimeframe, exchangeId, handleLiveCandle);
 
   // Draw neural level lines
   useEffect(() => {
