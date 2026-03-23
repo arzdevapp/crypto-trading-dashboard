@@ -17,7 +17,7 @@ interface Trade {
   openedAt: string;
 }
 
-export function LiveFeed() {
+export function LiveFeed({ className = '' }: { className?: string }) {
   const { activeExchangeId } = useStore();
 
   const { data } = useQuery({
@@ -34,7 +34,7 @@ export function LiveFeed() {
   const trades: Trade[] = Array.isArray(data?.trades) ? data.trades : [];
 
   return (
-    <div className="rounded-lg border overflow-hidden" style={{ background: '#0E1626', borderColor: '#243044' }}>
+    <div className={`rounded-lg border overflow-hidden ${className}`} style={{ background: '#0E1626', borderColor: '#243044' }}>
       <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: '#243044', background: '#070B10' }}>
         <Zap className="w-3.5 h-3.5" style={{ color: '#00FF66' }} />
         <span className="text-[11px] font-mono font-bold tracking-widest uppercase" style={{ color: '#00FF66' }}>Live Feed</span>

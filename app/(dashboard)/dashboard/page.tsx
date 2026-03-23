@@ -50,18 +50,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Main content — fills remaining height */}
-      <div className="flex-1 min-h-0 p-2 overflow-y-auto xl:overflow-hidden">
-        <div className="xl:h-full grid grid-cols-1 xl:grid-cols-4 gap-2 xl:items-start" style={{ gridTemplateRows: undefined }} >
+       {/* Main content — fills remaining height */}
+       <div className="flex-1 min-h-0 p-2 overflow-y-auto xl:overflow-hidden">
+         <div className="xl:h-full grid grid-cols-1 xl:grid-cols-4 gap-2 xl:items-start" style={{ gridTemplateRows: undefined }} >
 
-          {/* Left column — scrollable on desktop, stacks on mobile */}
-          <div className="flex flex-col gap-2 xl:overflow-y-auto xl:min-h-0 xl:h-full pr-0.5 order-2 xl:order-1">
-            <AccountMetrics />
-            <NeuralSignalMatrix />
-            <StrategyStatusPanel />
-            <LiveFeed />
-            <SentimentPanel />
-          </div>
+           {/* Left column — scrollable on desktop, stacks on mobile */}
+           <div className="flex flex-col gap-2 xl:overflow-y-auto xl:min-h-0 xl:h-full pr-0.5 order-2 xl:order-1">
+             <AccountMetrics />
+             <NeuralSignalMatrix />
+             <StrategyStatusPanel />
+             <LiveFeed className="flex-1 min-h-0" />
+             <SentimentPanel />
+           </div>
 
           {/* Center — 3 cols on desktop, chart-first on mobile */}
           <div className="xl:col-span-3 flex flex-col gap-2 xl:min-h-0 xl:h-full order-1 xl:order-2">
