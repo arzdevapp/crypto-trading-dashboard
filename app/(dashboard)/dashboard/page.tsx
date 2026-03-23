@@ -159,8 +159,8 @@ export default function DashboardPage() {
         <HorizontalSplit
           className="h-full"
           defaultLeftWidth={300}
-          minLeft={200}
-          maxLeft={500}
+          minLeft={160}
+          maxLeft={700}
           left={leftSidebar}
           right={chartArea}
         />

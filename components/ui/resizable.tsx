@@ -138,7 +138,7 @@ export function HorizontalSplit({
 
   return (
     <div className={`flex ${className}`} style={style}>
-      <div className="flex-shrink-0 min-h-0 overflow-hidden" style={{ width: leftWidth }}>
+      <div className="flex-shrink-0 min-h-0 overflow-x-hidden overflow-y-auto" style={{ width: leftWidth }}>
         {left}
       </div>
       <ResizeHandle direction="horizontal" onResize={handleResize} />

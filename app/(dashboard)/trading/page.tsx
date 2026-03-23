@@ -142,8 +142,8 @@ export default function TradingPage() {
         <HorizontalSplit
           className="h-full"
           defaultLeftWidth={240}
-          minLeft={180}
-          maxLeft={400}
+          minLeft={160}
+          maxLeft={600}
           left={sidebar}
           right={mainArea}
         />
