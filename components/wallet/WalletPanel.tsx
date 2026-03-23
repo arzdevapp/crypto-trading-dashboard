@@ -28,6 +28,18 @@ export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) 
     staleTime: 9000,
   });
 
+  // Get all assets with non-zero balance
+  const heldAssets = Object.entries(balanceData || {})
+    .filter(([_, balance]) => (balance?.free ?? 0) > 0)
+    .sort(([a], [b]) => {
+      // Prioritize quote asset, then base asset, then alphabetical
+      if (a === quoteAsset) return -1;
+      if (b === quoteAsset) return 1;
+      if (a === baseAsset) return -1;
+      if (b === baseAsset) return 1;
+      return a.localeCompare(b);
+    });
+
   const livePrice  = ticker?.last ?? 0;
   const freeQuote  = balanceData?.[quoteAsset]?.free  ?? 0;
   const usedQuote  = balanceData?.[quoteAsset]?.used  ?? 0;
@@ -94,78 +106,62 @@ export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) 
               Retry
             </button>
           </div>
-        ) : (
-          <>
-            {/* Quote asset (USDT) row */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] font-mono">
-                <span style={{ color: '#6b7280' }}>Free {quoteAsset}</span>
-                <span style={{ color: freeQuote > 0 ? '#C7D1DB' : '#6b7280' }}>
-                  ${freeQuote.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        ) : heldAssets.length === 0 ? (
+          <p className="text-[10px] font-mono text-center py-2" style={{ color: '#4b5563' }}>No holdings</p>
+        ) : compact ? (
+          // Compact mode — list all assets
+          <div className="space-y-1.5">
+            {heldAssets.map(([asset, balance]) => (
+              <div key={asset} className="flex justify-between text-[10px] font-mono">
+                <span style={{ color: '#6b7280' }}>{asset}</span>
+                <span style={{ color: '#C7D1DB' }}>
+                  {(balance?.free ?? 0).toLocaleString(undefined, {
+                    minimumFractionDigits: asset === quoteAsset ? 2 : 0,
+                    maximumFractionDigits: asset === quoteAsset ? 2 : 6
+                  })}
                 </span>
               </div>
-              {usedQuote > 0 && (
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span style={{ color: '#4b5563' }}>In orders</span>
-                  <span style={{ color: '#6b7280' }}>
-                    ${usedQuote.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-              )}
-              {/* Free / used bar */}
-              {totalQuote > 0 && (
-                <div className="h-1 rounded-full overflow-hidden" style={{ background: '#121C2F' }}>
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(100, 100 - usedPctQuote)}%`,
-                      background: freeQuote / totalQuote > 0.5 ? '#22c55e' : freeQuote / totalQuote > 0.2 ? '#f59e0b' : '#ef4444',
-                    }}
-                  />
-                </div>
-              )}
-            </div>
+            ))}
+          </div>
+        ) : (
+          // Full mode — detailed view
+          <>
+            {heldAssets.map(([asset, balance]) => {
+              const free = balance?.free ?? 0;
+              const used = balance?.used ?? 0;
+              const total = balance?.total ?? 0;
+              const usedPct = total > 0 ? (used / total) * 100 : 0;
 
-            {/* Base asset row (if held) */}
-            {totalBase > 0 && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span style={{ color: '#6b7280' }}>Free {baseAsset}</span>
-                  <span style={{ color: '#C7D1DB' }}>
-                    {freeBase.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}
-                    {baseValueUsd > 0 && (
-                      <span style={{ color: '#6b7280' }}> ≈ ${baseValueUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                    )}
-                  </span>
-                </div>
-                {usedBase > 0 && (
+              return (
+                <div key={asset} className="space-y-1">
                   <div className="flex justify-between text-[10px] font-mono">
-                    <span style={{ color: '#4b5563' }}>In orders</span>
-                    <span style={{ color: '#6b7280' }}>
-                      {usedBase.toLocaleString(undefined, { maximumFractionDigits: 6 })} {baseAsset}
+                    <span style={{ color: '#6b7280' }}>{asset}</span>
+                    <span style={{ color: free > 0 ? '#C7D1DB' : '#6b7280' }}>
+                      {free.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })}
                     </span>
                   </div>
-                )}
-                {totalBase > 0 && (
-                  <div className="h-1 rounded-full overflow-hidden" style={{ background: '#121C2F' }}>
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${Math.min(100, heldPctBase)}%`, background: '#3b82f6' }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Total portfolio est — show on full mode, or compact when base is held */}
-            {(!compact || totalBase > 0) && totalValueUsd > 0 && (
-              <div className="flex justify-between text-[10px] font-mono pt-0.5 border-t" style={{ borderColor: '#1a2538' }}>
-                <span style={{ color: '#6b7280' }}>Est. total ({quoteAsset})</span>
-                <span style={{ color: '#9ca3af' }}>
-                  ${totalValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            )}
+                  {used > 0 && (
+                    <div className="flex justify-between text-[10px] font-mono">
+                      <span style={{ color: '#4b5563' }}>In orders</span>
+                      <span style={{ color: '#6b7280' }}>
+                        {used.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                      </span>
+                    </div>
+                  )}
+                  {total > 0 && (
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: '#121C2F' }}>
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${Math.min(100, 100 - usedPct)}%`,
+                          background: free / total > 0.5 ? '#22c55e' : free / total > 0.2 ? '#f59e0b' : '#ef4444',
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             {/* % quick-select — only shown if parent wants them */}
             {onSelectPct && (freeQuote > 0 || freeBase > 0) && (
