@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PriceChart, type ActiveIndicators } from '@/components/charts/PriceChart';
 import { NeuralLevelsOverlay } from '@/components/charts/NeuralLevelsOverlay';
@@ -115,6 +115,17 @@ export default function DCABotPage() {
     setLongLevels(long);
     setShortLevels(short);
   }, []);
+
+  // Reset form state when symbol changes
+  const prevSymbol = useRef(selectedSymbol);
+  useEffect(() => {
+    if (prevSymbol.current !== selectedSymbol) {
+      prevSymbol.current = selectedSymbol;
+      setLongLevels([]);
+      setShortLevels([]);
+      setUsdtInput('');
+    }
+  }, [selectedSymbol]);
 
   // Poll current bot status
   const { data: botStatus } = useQuery<BotStatus>({
@@ -426,26 +437,32 @@ export default function DCABotPage() {
             </div>
 
             {/* Exposure summary */}
-            {parseFloat(quantity) > 0 && currentPrice > 0 && (
+            {!isNaN(parseFloat(quantity)) && parseFloat(quantity) > 0 && currentPrice > 0 && (() => {
+              const qty = parseFloat(quantity);
+              const perTrade = qty * currentPrice;
+              const maxExposure = qty * 7 * currentPrice;
+              const pctUsed = freeQuote > 0 ? (maxExposure / freeQuote) * 100 : 0;
+              return (
               <div className="rounded px-2 py-1.5 space-y-0.5" style={{ background: '#060d18', border: '1px solid #1a2538' }}>
                 <div className="flex justify-between text-[9px] font-mono">
                   <span style={{ color: '#6b7280' }}>Per trade</span>
-                  <span style={{ color: '#C7D1DB' }}>{parseFloat(quantity).toFixed(6)} {baseAsset} ≈ <span style={{ color: '#9ca3af' }}>${(parseFloat(quantity) * currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+                  <span style={{ color: '#C7D1DB' }}>{qty.toFixed(6)} {baseAsset} ≈ <span style={{ color: '#9ca3af' }}>${perTrade.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
                 </div>
                 <div className="flex justify-between text-[9px] font-mono">
                   <span style={{ color: '#6b7280' }}>Max exposure (×7 DCA)</span>
-                  <span style={{ color: '#f59e0b' }}>${(parseFloat(quantity) * 7 * currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span style={{ color: '#f59e0b' }}>${maxExposure.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 {freeQuote > 0 && (
                   <div className="flex justify-between text-[9px] font-mono">
                     <span style={{ color: '#6b7280' }}>% of balance used</span>
-                    <span style={{ color: (parseFloat(quantity) * 7 * currentPrice) / freeQuote > 0.8 ? '#ef4444' : '#9ca3af' }}>
-                      {Math.min(100, ((parseFloat(quantity) * 7 * currentPrice) / freeQuote * 100)).toFixed(1)}%
+                    <span style={{ color: pctUsed > 80 ? '#ef4444' : '#9ca3af' }}>
+                      {Math.min(100, pctUsed).toFixed(1)}%
                     </span>
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
           </div>
 
           <div>

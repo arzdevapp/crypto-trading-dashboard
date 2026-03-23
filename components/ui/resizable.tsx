@@ -10,37 +10,58 @@ function ResizeHandle({ direction, onResize }: ResizeHandleProps) {
   const dragging = useRef(false);
   const lastPos = useRef(0);
   const handleRef = useRef<HTMLDivElement>(null);
+  const onResizeRef = useRef(onResize);
+  onResizeRef.current = onResize;
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    dragging.current = true;
-    lastPos.current = direction === 'horizontal' ? e.clientX : e.clientY;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  useEffect(() => {
+    const el = handleRef.current;
+    if (!el) return;
+
+    const onDown = (e: PointerEvent) => {
+      e.preventDefault();
+      dragging.current = true;
+      lastPos.current = direction === 'horizontal' ? e.clientX : e.clientY;
+      el.setPointerCapture(e.pointerId);
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      const current = direction === 'horizontal' ? e.clientX : e.clientY;
+      const delta = current - lastPos.current;
+      if (delta !== 0) {
+        onResizeRef.current(delta);
+        lastPos.current = current;
+      }
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      if (el.hasPointerCapture(e.pointerId)) {
+        el.releasePointerCapture(e.pointerId);
+      }
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    // Fallback: document-level pointerup in case capture is lost
+    document.addEventListener('pointerup', () => { dragging.current = false; });
+
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
   }, [direction]);
-
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    const current = direction === 'horizontal' ? e.clientX : e.clientY;
-    const delta = current - lastPos.current;
-    if (delta !== 0) {
-      onResize(delta);
-      lastPos.current = current;
-    }
-  }, [direction, onResize]);
-
-  const onPointerUp = useCallback(() => {
-    dragging.current = false;
-  }, []);
 
   const isH = direction === 'horizontal';
 
   return (
     <div
       ref={handleRef}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
       className="flex-shrink-0 group relative"
       style={{
         width: isH ? 6 : '100%',
@@ -151,7 +172,6 @@ export function VerticalSplit({
   const [bottomHeight, setBottomHeight] = useState(defaultBottomHeight);
 
   const handleResize = useCallback((delta: number) => {
-    // dragging down = positive delta = bottom gets smaller
     setBottomHeight(h => Math.max(minBottom, Math.min(maxBottom, h - delta)));
   }, [minBottom, maxBottom]);
 

@@ -84,7 +84,10 @@ export function TickerBar() {
         {tickers.map((t) => (
           <TickerEntry
             key={t.symbol}
-            {...t}
+            symbol={t.symbol}
+            last={t.last}
+            percentage={t.percentage}
+            volume={t.volume}
             isActive={t.symbol === selectedSymbol}
             onClick={() => setSelectedSymbol(t.symbol)}
           />

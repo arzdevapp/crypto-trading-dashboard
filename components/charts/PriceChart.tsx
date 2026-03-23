@@ -42,23 +42,28 @@ function calcRSI(values: number[], period = 14): number[] {
   }
   let avgGain = gains / period;
   let avgLoss = losses / period;
-  result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  const rsiVal = (ag: number, al: number) =>
+    al === 0 ? 100 : ag === 0 ? 0 : 100 - 100 / (1 + ag / al);
+  result.push(rsiVal(avgGain, avgLoss));
   for (let i = period + 1; i < values.length; i++) {
     const diff = values[i] - values[i - 1];
     avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period;
     avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
-    result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+    result.push(rsiVal(avgGain, avgLoss));
   }
   return result;
 }
 
 function calcBollinger(values: number[], period = 20, mult = 2) {
   const middle = calcSMA(values, period);
+  if (middle.length === 0) return { upper: [], middle: [], lower: [] };
   const upper: number[] = [];
   const lower: number[] = [];
   for (let i = period - 1; i < values.length; i++) {
+    const idx = i - (period - 1);
+    if (idx >= middle.length) break;
     const slice = values.slice(i - period + 1, i + 1);
-    const mean = middle[i - (period - 1)];
+    const mean = middle[idx];
     const variance = slice.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / period;
     const stdDev = Math.sqrt(variance);
     upper.push(mean + mult * stdDev);
@@ -70,9 +75,14 @@ function calcBollinger(values: number[], period = 20, mult = 2) {
 function calcMACD(values: number[], fastP = 12, slowP = 26, sigP = 9) {
   const fastEMA = calcEMA(values, fastP);
   const slowEMA = calcEMA(values, slowP);
+  if (fastEMA.length === 0 || slowEMA.length === 0) return { macd: [], signal: [], histogram: [] };
   const offset = slowP - fastP;
-  const macdLine = slowEMA.map((v, i) => fastEMA[i + offset] - v);
+  const macdLine = slowEMA.map((v, i) => {
+    const fi = i + offset;
+    return fi < fastEMA.length ? fastEMA[fi] - v : 0;
+  });
   const signalLine = calcEMA(macdLine, sigP);
+  if (signalLine.length === 0) return { macd: macdLine, signal: [], histogram: [] };
   const sigOffset = macdLine.length - signalLine.length;
   const histogram = signalLine.map((v, i) => macdLine[i + sigOffset] - v);
   return { macd: macdLine, signal: signalLine, histogram };
@@ -181,11 +191,13 @@ export function PriceChart({ exchangeId, symbol, longLevels = [], shortLevels = 
 
     return () => {
       resizeObserver.disconnect();
+      const c = chart;
+      chart = null;
       chartRef.current = null;
       candleSeriesRef.current = null;
       levelSeriesRef.current = [];
       indicatorSeriesRef.current = [];
-      chart?.remove();
+      c?.remove();
     };
   }, []);
 
