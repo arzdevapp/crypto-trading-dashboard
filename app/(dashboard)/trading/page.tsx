@@ -6,6 +6,7 @@ import { SymbolSelector } from '@/components/trading/SymbolSelector';
 import { HorizontalSplit, VerticalSplit } from '@/components/ui/resizable';
 import { useStore } from '@/store';
 import { PageHelp } from '@/components/ui/page-help';
+import { WalletPanel } from '@/components/wallet/WalletPanel';
 import { useQuery } from '@tanstack/react-query';
 
 export default function TradingPage() {
@@ -75,6 +76,9 @@ export default function TradingPage() {
         </div>
       </div>
 
+      {/* Wallet summary */}
+      <WalletPanel compact />
+
       {/* Order form */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <OrderForm exchangeId={activeExchangeId} symbol={selectedSymbol} />
@@ -128,6 +132,7 @@ export default function TradingPage() {
         <div className="h-[350px] flex-shrink-0">
           <PriceChart exchangeId={activeExchangeId} symbol={selectedSymbol} indicators={activeIndicators} />
         </div>
+        <WalletPanel compact />
         <OrderForm exchangeId={activeExchangeId} symbol={selectedSymbol} />
         <OpenOrdersList exchangeId={activeExchangeId} symbol={selectedSymbol} />
       </div>

@@ -14,6 +14,7 @@ import { HorizontalSplit, VerticalSplit } from '@/components/ui/resizable';
 import { useStore } from '@/store';
 import { PageHelp } from '@/components/ui/page-help';
 import { SymbolSearch } from '@/components/dashboard/SymbolSearch';
+import { WalletPanel } from '@/components/wallet/WalletPanel';
 
 export default function DashboardPage() {
   const { activeExchangeId, selectedSymbol, activeIndicators } = useStore();
@@ -53,6 +54,7 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      <WalletPanel />
       <AccountMetrics />
       <NeuralSignalMatrix />
       <StrategyStatusPanel />
@@ -68,6 +70,7 @@ export default function DashboardPage() {
   // Desktop layout — resizable panels
   const leftSidebar = (
     <div className="flex flex-col gap-2 h-full overflow-y-auto p-2 pr-0">
+      <WalletPanel />
       <AccountMetrics />
       <NeuralSignalMatrix />
       <StrategyStatusPanel />
