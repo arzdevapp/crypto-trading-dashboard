@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { WsMessage } from '../types/websocket';
+import { getAllRunnerIds, getRunnerStatus } from '../lib/strategies/StrategyRunner';
 
 interface Client {
   ws: WebSocket;
@@ -28,6 +29,19 @@ export function createWebSocketServer(port: number) {
     ws.on('error', () => clients.delete(client));
 
     ws.send(JSON.stringify({ type: 'pong' }));
+
+    // Send current state of all running strategies to the newly connected client
+    // so a reconnecting device sees accurate status immediately.
+    for (const id of getAllRunnerIds()) {
+      const runner = getRunnerStatus(id);
+      if (!runner) continue;
+      ws.send(JSON.stringify({
+        type: 'strategy',
+        strategyId: id,
+        status: runner.status,
+        signal: runner.lastSignal,
+      }));
+    }
   });
 
   console.log(`WebSocket server running on port ${port}`);

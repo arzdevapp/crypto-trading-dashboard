@@ -219,13 +219,22 @@ export async function startStrategy(strategyId: string): Promise<void> {
       }
     } catch (err) {
       if (!runners.has(strategyId)) return; // Deleted during execution — don't overwrite status
-      const error = err instanceof Error ? err.message : String(err);
-      // Stop the runner so we don't keep spamming errors on every interval tick
+      const error = err instanceof Error ? err : new Error(String(err));
+
+      // Transient errors (network blips, rate limits, timeouts) are expected during
+      // device switches or brief connectivity loss. Skip this tick and let the next
+      // interval fire normally — do NOT stop the runner.
+      if (isTransientError(error)) {
+        await log('warn', `strategy:${strategyId}`, `Transient error (skipping tick): ${error.message}`, { strategyId });
+        return;
+      }
+
+      // Permanent error — stop the runner so we don't keep spamming on every tick
       clearInterval(interval);
       runners.delete(strategyId);
       await prisma.strategy.update({ where: { id: strategyId }, data: { status: 'error' } }).catch(() => {});
-      statusCallback?.(strategyId, 'error', undefined, error);
-      await log('error', `strategy:${strategyId}`, `Strategy error: ${error}`, { strategyId });
+      statusCallback?.(strategyId, 'error', undefined, error.message);
+      await log('error', `strategy:${strategyId}`, `Strategy error: ${error.message}`, { strategyId });
     }
   }, intervalMs);
 
