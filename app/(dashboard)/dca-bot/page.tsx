@@ -14,6 +14,7 @@ import { NewsSentimentWidget } from '@/components/news/NewsSentimentWidget';
 import { HorizontalSplit, VerticalSplit } from '@/components/ui/resizable';
 import { PageHelp } from '@/components/ui/page-help';
 import { formatCurrency, formatCrypto, formatPercent } from '@/lib/utils';
+import { WalletPanel } from '@/components/wallet/WalletPanel';
 
 interface BotStatus {
   running: boolean;
@@ -318,6 +319,11 @@ export default function DCABotPage() {
           <SymbolSelector exchangeId={activeExchangeId} value={selectedSymbol} onChange={setSelectedSymbol} />
         </div>
 
+        {/* Wallet — all exchange assets */}
+        <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: '#1a2538' }}>
+          <WalletPanel />
+        </div>
+
         {/* Bot settings */}
         <div className="px-3 py-3 border-b flex-shrink-0 space-y-3" style={{ borderColor: '#1a2538' }}>
           <div className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Bot Configuration</div>
@@ -435,30 +441,57 @@ export default function DCABotPage() {
               </div>
             </div>
 
-            {/* Exposure summary */}
+            {/* Stage allocation breakdown */}
             {!isNaN(parseFloat(quantity)) && parseFloat(quantity) > 0 && currentPrice > 0 && (() => {
               const qty = parseFloat(quantity);
               const perTrade = qty * currentPrice;
               const maxExposure = qty * 7 * currentPrice;
               const pctUsed = freeQuote > 0 ? (maxExposure / freeQuote) * 100 : 0;
               return (
-              <div className="rounded px-2 py-1.5 space-y-0.5" style={{ background: '#060d18', border: '1px solid #1a2538' }}>
-                <div className="flex justify-between text-[9px] font-mono">
-                  <span style={{ color: '#6b7280' }}>Per trade</span>
-                  <span style={{ color: '#C7D1DB' }}>{qty.toFixed(6)} {baseAsset} ≈ <span style={{ color: '#9ca3af' }}>${perTrade.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-                </div>
-                <div className="flex justify-between text-[9px] font-mono">
-                  <span style={{ color: '#6b7280' }}>Max exposure (×7 DCA)</span>
-                  <span style={{ color: '#f59e0b' }}>${maxExposure.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                {freeQuote > 0 && (
+              <div className="rounded space-y-1.5 px-2 py-2" style={{ background: '#060d18', border: '1px solid #1a2538' }}>
+                <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#4b5563' }}>Stage Allocation</div>
+                {Array.from({ length: 7 }, (_, i) => {
+                  const stage = i + 1;
+                  const cumulative = perTrade * stage;
+                  const cumPct = freeQuote > 0 ? (cumulative / freeQuote) * 100 : 0;
+                  const isCurrent = ps?.inPosition && ps.dcaStage === stage;
+                  const isPast = ps?.inPosition && ps.dcaStage > stage;
+                  return (
+                    <div key={stage} className="flex items-center gap-1.5">
+                      <span
+                        className="text-[9px] font-mono w-12 flex-shrink-0"
+                        style={{ color: isCurrent ? '#f97316' : isPast ? '#22c55e' : '#4b5563' }}
+                      >
+                        Stage {stage}
+                      </span>
+                      <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: '#121C2F' }}>
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: freeQuote > 0 ? `${Math.min(100, cumPct)}%` : `${(stage / 7) * 100}%`,
+                            background: isCurrent ? '#f97316' : isPast ? '#22c55e' : '#1e3a5f',
+                          }}
+                        />
+                      </div>
+                      <span className="text-[9px] font-mono w-14 text-right flex-shrink-0" style={{ color: isCurrent ? '#f97316' : isPast ? '#22c55e' : '#6b7280' }}>
+                        ${cumulative >= 1000 ? `${(cumulative / 1000).toFixed(1)}k` : cumulative.toFixed(0)}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div className="pt-1 border-t space-y-0.5" style={{ borderColor: '#1a2538' }}>
                   <div className="flex justify-between text-[9px] font-mono">
-                    <span style={{ color: '#6b7280' }}>% of balance used</span>
-                    <span style={{ color: pctUsed > 80 ? '#ef4444' : '#9ca3af' }}>
-                      {Math.min(100, pctUsed).toFixed(1)}%
+                    <span style={{ color: '#6b7280' }}>Per trade</span>
+                    <span style={{ color: '#C7D1DB' }}>{qty.toFixed(6)} {baseAsset}</span>
+                  </div>
+                  <div className="flex justify-between text-[9px] font-mono">
+                    <span style={{ color: '#6b7280' }}>Max exposure</span>
+                    <span style={{ color: pctUsed > 80 ? '#ef4444' : '#f59e0b' }}>
+                      ${maxExposure.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      {freeQuote > 0 && <span style={{ color: '#6b7280' }}> ({Math.min(100, pctUsed).toFixed(1)}%)</span>}
                     </span>
                   </div>
-                )}
+                </div>
               </div>
               );
             })()}
