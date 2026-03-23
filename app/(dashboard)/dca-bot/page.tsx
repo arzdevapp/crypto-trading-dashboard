@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Brain, RefreshCw, Zap, Square, Activity, Eye, Trash2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Brain, RefreshCw, Zap, Square, Activity, Eye, Trash2, TrendingUp, TrendingDown, Minus, Trophy, BarChart2 } from 'lucide-react';
 import { NewsSentimentWidget } from '@/components/news/NewsSentimentWidget';
 import { HorizontalSplit, VerticalSplit } from '@/components/ui/resizable';
 import { PageHelp } from '@/components/ui/page-help';
@@ -133,6 +133,21 @@ export default function DCABotPage() {
     staleTime: 4000,
   });
   const allBots = allBotsData?.bots ?? [];
+
+  // Fetch closed trades for this bot (strategyId known once botStatus loads)
+  const strategyId = botStatus?.strategy?.id;
+  const { data: tradesData } = useQuery<{ trades: Array<{ id: string; side: string; pnl: number | null; quantity: number; price: number; openedAt: string }> }>({
+    queryKey: ['dca-trades', strategyId, selectedSymbol],
+    queryFn: () => fetch(`/api/trades?strategyId=${strategyId}&symbol=${encodeURIComponent(selectedSymbol)}&limit=50`).then(r => r.json()),
+    enabled: !!strategyId,
+    refetchInterval: 15000,
+    staleTime: 10000,
+  });
+
+  const closedTrades = (tradesData?.trades ?? []).filter(t => t.pnl !== null);
+  const realisedPnl = closedTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+  const winners = closedTrades.filter(t => (t.pnl ?? 0) > 0).length;
+  const winRate = closedTrades.length > 0 ? (winners / closedTrades.length) * 100 : 0;
 
   // Train
   const { mutate: trainModel, isPending: training } = useMutation({
@@ -492,6 +507,52 @@ export default function DCABotPage() {
   // ── Position dashboard panel ──
   const positionPanel = (
     <div className="h-full overflow-auto border-t" style={{ borderColor: '#1a2538' }}>
+
+      {/* ── Profit Summary ── */}
+      <div className="grid grid-cols-3 divide-x border-b" style={{ borderColor: '#1a2538', background: '#060d18' }}>
+        {/* Realised P&L */}
+        <div className="px-4 py-2.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Trophy className="w-3 h-3" style={{ color: '#6b7280' }} />
+            <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Realised P&L</span>
+          </div>
+          <div className="text-base font-mono font-bold" style={{ color: realisedPnl > 0 ? '#00FF66' : realisedPnl < 0 ? '#ef4444' : '#9ca3af' }}>
+            {closedTrades.length === 0 ? '—' : `${realisedPnl >= 0 ? '+' : ''}${formatCurrency(realisedPnl)}`}
+          </div>
+          <div className="text-[9px] font-mono mt-0.5" style={{ color: '#6b7280' }}>
+            {closedTrades.length === 0 ? 'no closed trades yet' : `from ${closedTrades.length} closed trade${closedTrades.length !== 1 ? 's' : ''}`}
+          </div>
+        </div>
+
+        {/* Unrealised P&L */}
+        <div className="px-4 py-2.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <BarChart2 className="w-3 h-3" style={{ color: '#6b7280' }} />
+            <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Unrealised P&L</span>
+          </div>
+          <div className="text-base font-mono font-bold" style={{ color: pnl > 0 ? '#00FF66' : pnl < 0 ? '#ef4444' : '#9ca3af' }}>
+            {ps?.inPosition ? `${pnl >= 0 ? '+' : ''}${formatCurrency(pnl)}` : '—'}
+          </div>
+          <div className="text-[9px] font-mono mt-0.5" style={{ color: '#6b7280' }}>
+            {ps?.inPosition ? `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% open position` : 'no open position'}
+          </div>
+        </div>
+
+        {/* Win Rate */}
+        <div className="px-4 py-2.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <TrendingUp className="w-3 h-3" style={{ color: '#6b7280' }} />
+            <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Win Rate</span>
+          </div>
+          <div className="text-base font-mono font-bold" style={{ color: winRate >= 60 ? '#00FF66' : winRate >= 40 ? '#f59e0b' : closedTrades.length === 0 ? '#9ca3af' : '#ef4444' }}>
+            {closedTrades.length === 0 ? '—' : `${winRate.toFixed(0)}%`}
+          </div>
+          <div className="text-[9px] font-mono mt-0.5" style={{ color: '#6b7280' }}>
+            {closedTrades.length === 0 ? 'no data yet' : `${winners}W / ${closedTrades.length - winners}L`}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0" style={{ borderColor: '#1a2538', background: '#0A1220' }}>
         <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
           <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#6b7280' }}>Current Price</div>
@@ -564,6 +625,43 @@ export default function DCABotPage() {
           </div>
         )}
       </div>
+
+      {/* Recent closed trades */}
+      {closedTrades.length > 0 && (
+        <div className="border-t" style={{ borderColor: '#1a2538' }}>
+          <div className="px-4 py-2 border-b flex items-center justify-between" style={{ borderColor: '#1a2538', background: '#060d18' }}>
+            <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Recent Closed Trades</span>
+            <span className="text-[9px] font-mono" style={{ color: '#374151' }}>showing last {Math.min(closedTrades.length, 8)}</span>
+          </div>
+          <div className="divide-y" style={{ borderColor: '#1a2538' }}>
+            {closedTrades.slice(0, 8).map(trade => {
+              const profit = trade.pnl ?? 0;
+              const isWin = profit > 0;
+              return (
+                <div key={trade.id} className="flex items-center gap-3 px-4 py-1.5">
+                  <div className="w-1 h-5 rounded-full flex-shrink-0" style={{ background: isWin ? '#00FF66' : '#ef4444' }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-bold" style={{ color: '#C7D1DB' }}>{trade.side.toUpperCase()}</span>
+                      <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>
+                        {formatCrypto(trade.quantity, 6)} @ {formatCurrency(trade.price)}
+                      </span>
+                    </div>
+                    <div className="text-[9px] font-mono" style={{ color: '#374151' }}>
+                      {new Date(trade.openedAt).toLocaleDateString()} {new Date(trade.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-[11px] font-mono font-bold" style={{ color: isWin ? '#00FF66' : '#ef4444' }}>
+                      {isWin ? '+' : ''}{formatCurrency(profit)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 
