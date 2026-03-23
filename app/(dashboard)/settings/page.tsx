@@ -11,6 +11,7 @@ import { SUPPORTED_EXCHANGES } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, Plus, Settings, Plug } from 'lucide-react';
 import { PageHelp } from '@/components/ui/page-help';
+import { TailscaleWidget } from '@/components/network/TailscaleWidget';
 
 interface ExchangeConfig {
   id: string;
@@ -111,7 +112,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Right: add exchange form — on mobile shows first */}
-      <div className="xl:w-72 flex-shrink-0 order-1 xl:order-2">
+      <div className="xl:w-72 flex-shrink-0 order-1 xl:order-2 flex flex-col gap-2">
         <div className="rounded-lg border overflow-hidden" style={{ background: '#0E1626', borderColor: '#243044' }}>
           <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: '#243044', background: '#070B10' }}>
             <Settings className="w-3.5 h-3.5" style={{ color: '#00E5FF' }} />
@@ -173,6 +174,9 @@ export default function SettingsPage() {
             </Button>
           </div>
         </div>
+
+        {/* Tailscale network status */}
+        <TailscaleWidget />
       </div>
 
     </div>

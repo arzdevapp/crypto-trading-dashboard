@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TailscaleStatusDot } from '@/components/network/TailscaleWidget';
 
 export const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -84,6 +85,18 @@ export function Sidebar() {
             );
           })}
         </nav>
+
+        {/* Tailscale status */}
+        <div className="px-2 border-t border-border">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <TailscaleStatusDot expanded={sidebarOpen} />
+              </div>
+            </TooltipTrigger>
+            {!sidebarOpen && <TooltipContent side="right">Tailscale</TooltipContent>}
+          </Tooltip>
+        </div>
 
         {/* Git Pull button */}
         <div className="px-2 py-2 border-t border-border">
