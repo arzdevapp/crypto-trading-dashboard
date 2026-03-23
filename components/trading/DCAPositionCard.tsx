@@ -1,9 +1,12 @@
 'use client';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Slider } from '@/components/ui/slider';
 import { TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { formatCurrency, formatPercent, formatCrypto } from '@/lib/utils';
+import { useState } from 'react';
 
 export interface DCAPosition {
   symbol: string;
@@ -19,7 +22,10 @@ export interface DCAPosition {
 }
 
 export function DCAPositionCard({ position }: { position: DCAPosition }) {
-  const pnl = (position.currentPrice - position.avgCostBasis) * position.positionSize;
+  const [adjustedPositionSize, setAdjustedPositionSize] = useState(position.positionSize);
+  
+  // Calculate P&L based on adjusted position size
+  const pnl = (position.currentPrice - position.avgCostBasis) * adjustedPositionSize;
   const pnlPct = position.avgCostBasis > 0
     ? ((position.currentPrice - position.avgCostBasis) / position.avgCostBasis) * 100
     : 0;
@@ -46,7 +52,7 @@ export function DCAPositionCard({ position }: { position: DCAPosition }) {
           <div className="text-muted-foreground">Current Price</div>
           <div className="font-mono text-right">{formatCurrency(position.currentPrice)}</div>
           <div className="text-muted-foreground">Size</div>
-          <div className="font-mono text-right">{formatCrypto(position.positionSize, 6)}</div>
+          <div className="font-mono text-right">{formatCrypto(adjustedPositionSize, 6)}</div>
           <div className="text-muted-foreground">Unrealized P&L</div>
           <div className={`font-mono text-right font-medium ${isProfit ? 'text-green-500' : 'text-red-500'}`}>
             {formatCurrency(pnl)}
@@ -77,6 +83,21 @@ export function DCAPositionCard({ position }: { position: DCAPosition }) {
             <span className="text-[10px] text-muted-foreground">SHORT</span>
             <Badge variant="outline" className="text-[10px] py-0 text-orange-400 border-orange-400/30">N{position.neuralShortLevel}</Badge>
           </div>
+        </div>
+        
+        {/* Position Size Slider */}
+        <div className="pt-4 border-t">
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span className="text-muted-foreground">Adjust Position Size</span>
+            <span className="font-mono">{formatCrypto(adjustedPositionSize, 6)}</span>
+          </div>
+          <Slider
+            min={0.001}
+            max={position.positionSize * 3} // Allow up to 3x original size
+            step={0.001}
+            value={[adjustedPositionSize]}
+            onValueChange={([value]) => setAdjustedPositionSize(value)}
+          />
         </div>
       </CardContent>
     </Card>
