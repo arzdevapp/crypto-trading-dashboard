@@ -9,9 +9,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { SUPPORTED_EXCHANGES } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Plus, Settings, Plug } from 'lucide-react';
+import { Trash2, Plus, Settings, Plug, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { PageHelp } from '@/components/ui/page-help';
 import { TailscaleWidget } from '@/components/network/TailscaleWidget';
+
+type UpdateStatus = 'idle' | 'loading' | 'done' | 'uptodate' | 'error';
 
 interface ExchangeConfig {
   id: string;
@@ -27,7 +29,24 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
   const [sandbox, setSandbox] = useState(true);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const queryClient = useQueryClient();
+
+  const handleUpdate = async () => {
+    setUpdateStatus('loading');
+    try {
+      const res = await fetch('/api/admin/update', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setUpdateStatus(data.alreadyUpToDate ? 'uptodate' : 'done');
+      } else {
+        setUpdateStatus('error');
+      }
+    } catch {
+      setUpdateStatus('error');
+    }
+    setTimeout(() => setUpdateStatus('idle'), 4000);
+  };
 
   const { data: exchanges = [] } = useQuery<ExchangeConfig[]>({
     queryKey: ['exchanges'],
@@ -171,6 +190,39 @@ export default function SettingsPage() {
               onClick={() => addExchange()}
             >
               <Plus className="w-3.5 h-3.5" /> Add Exchange
+            </Button>
+          </div>
+        </div>
+
+        {/* System */}
+        <div className="rounded-lg border overflow-hidden" style={{ background: '#0E1626', borderColor: '#243044' }}>
+          <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: '#243044', background: '#070B10' }}>
+            <RefreshCw className="w-3.5 h-3.5" style={{ color: '#00E5FF' }} />
+            <span className="text-[11px] font-mono font-bold tracking-widest uppercase" style={{ color: '#00E5FF' }}>System</span>
+          </div>
+          <div className="p-3">
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full gap-2 text-xs"
+              disabled={updateStatus === 'loading'}
+              onClick={handleUpdate}
+              style={
+                updateStatus === 'done' ? { color: '#4ade80', borderColor: '#4ade80' }
+                : updateStatus === 'error' ? { color: '#f87171', borderColor: '#f87171' }
+                : undefined
+              }
+            >
+              {updateStatus === 'loading' && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              {updateStatus === 'done' && <Check className="w-3.5 h-3.5" />}
+              {updateStatus === 'uptodate' && <Check className="w-3.5 h-3.5" />}
+              {updateStatus === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
+              {updateStatus === 'idle' && <RefreshCw className="w-3.5 h-3.5" />}
+              {updateStatus === 'loading' && 'Pulling...'}
+              {updateStatus === 'done' && 'Updated!'}
+              {updateStatus === 'uptodate' && 'Up to date'}
+              {updateStatus === 'error' && 'Pull failed'}
+              {updateStatus === 'idle' && 'Pull from GitHub'}
             </Button>
           </div>
         </div>
