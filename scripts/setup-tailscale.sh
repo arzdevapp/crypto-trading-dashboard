@@ -88,18 +88,58 @@ fi
 echo ""
 echo -e "${CYAN}▶ Starting Tailscale...${NC}"
 
+# ── Check TUN device availability (required in Proxmox LXC) ──────────────
+if [ ! -e /dev/net/tun ]; then
+  echo ""
+  echo -e "${RED}✗ /dev/net/tun not found — Tailscale requires TUN access.${NC}"
+  echo ""
+  echo -e "${YELLOW}  This is a Proxmox LXC container. Run these commands on the${NC}"
+  echo -e "${YELLOW}  PROXMOX HOST to grant TUN access, then re-run this script:${NC}"
+  echo ""
+  VMID=$(hostname | grep -oP '\d+' | head -1 || echo "YOUR_VMID")
+  echo -e "  ${CYAN}# Replace ${VMID} with your container's VMID (visible in Proxmox UI)${NC}"
+  echo -e "  ${CYAN}echo \"lxc.cgroup2.devices.allow: c 10:200 rwm\" >> /etc/pve/lxc/${VMID}.conf${NC}"
+  echo -e "  ${CYAN}echo \"lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file\" >> /etc/pve/lxc/${VMID}.conf${NC}"
+  echo -e "  ${CYAN}pct restart ${VMID}${NC}"
+  echo ""
+  exit 1
+fi
+
 # Enable & start daemon
 systemctl enable tailscaled 2>/dev/null || true
 systemctl start tailscaled 2>/dev/null || true
 
+# Wait for daemon to be ready (up to 5s)
+for i in 1 2 3 4 5; do
+  tailscale status &>/dev/null && break
+  sleep 1
+done
+
 # Connect
 # shellcheck disable=SC2086
-tailscale up \
+if ! tailscale up \
   --accept-routes \
   --accept-dns \
   $HOSTNAME_ARG \
   $EXIT_NODE_ARG \
-  $AUTH_KEY_ARG
+  $AUTH_KEY_ARG 2>&1; then
+
+  TS_ERR=$(tailscale up $HOSTNAME_ARG $EXIT_NODE_ARG $AUTH_KEY_ARG 2>&1 || true)
+  if echo "$TS_ERR" | grep -q "503\|no backend\|TUN"; then
+    echo ""
+    echo -e "${RED}✗ tailscaled started but can't access the TUN device.${NC}"
+    echo ""
+    echo -e "${YELLOW}  On the PROXMOX HOST, add TUN access to this container then restart it:${NC}"
+    echo ""
+    VMID=$(cat /proc/1/cgroup 2>/dev/null | grep -oP '(?<=lxc/)\d+' | head -1 || echo "YOUR_VMID")
+    echo -e "  ${CYAN}echo \"lxc.cgroup2.devices.allow: c 10:200 rwm\" >> /etc/pve/lxc/${VMID}.conf${NC}"
+    echo -e "  ${CYAN}echo \"lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file\" >> /etc/pve/lxc/${VMID}.conf${NC}"
+    echo -e "  ${CYAN}pct restart ${VMID}${NC}"
+    echo ""
+    exit 1
+  fi
+  exit 1
+fi
 
 echo ""
 echo -e "${GREEN}✓ Tailscale connected!${NC}"
