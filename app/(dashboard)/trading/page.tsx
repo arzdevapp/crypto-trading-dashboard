@@ -9,7 +9,7 @@ import { PageHelp } from '@/components/ui/page-help';
 import { useQuery } from '@tanstack/react-query';
 
 export default function TradingPage() {
-  const { activeExchangeId, selectedSymbol, setSelectedSymbol } = useStore();
+  const { activeExchangeId, selectedSymbol, setSelectedSymbol, activeIndicators } = useStore();
 
   const { data: ticker } = useQuery<{ last: number; change24h: number; percentage: number }>({
     queryKey: ['ticker', activeExchangeId, selectedSymbol],
@@ -90,7 +90,7 @@ export default function TradingPage() {
       maxBottom={300}
       top={
         <div className="h-full p-2 pl-0 pb-0">
-          <PriceChart exchangeId={activeExchangeId} symbol={selectedSymbol} />
+          <PriceChart exchangeId={activeExchangeId} symbol={selectedSymbol} indicators={activeIndicators} />
         </div>
       }
       bottom={
@@ -126,7 +126,7 @@ export default function TradingPage() {
           </div>
         </div>
         <div className="h-[350px] flex-shrink-0">
-          <PriceChart exchangeId={activeExchangeId} symbol={selectedSymbol} />
+          <PriceChart exchangeId={activeExchangeId} symbol={selectedSymbol} indicators={activeIndicators} />
         </div>
         <OrderForm exchangeId={activeExchangeId} symbol={selectedSymbol} />
         <OpenOrdersList exchangeId={activeExchangeId} symbol={selectedSymbol} />

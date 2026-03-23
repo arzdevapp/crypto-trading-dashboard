@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PriceChart, type ActiveIndicators } from '@/components/charts/PriceChart';
+import { PriceChart } from '@/components/charts/PriceChart';
 import { NeuralLevelsOverlay } from '@/components/charts/NeuralLevelsOverlay';
 import { SymbolSelector } from '@/components/trading/SymbolSelector';
 import { useStore } from '@/store';
@@ -100,7 +100,7 @@ function DcaTrack({ stage, max = 7, active }: { stage: number; max?: number; act
 }
 
 export default function DCABotPage() {
-  const { activeExchangeId, selectedSymbol, setSelectedSymbol } = useStore();
+  const { activeExchangeId, selectedSymbol, setSelectedSymbol, activeIndicators: indicators, toggleIndicator } = useStore();
   const [longLevels, setLongLevels] = useState<number[]>([]);
   const [shortLevels, setShortLevels] = useState<number[]>([]);
   const [timeframe, setTimeframe] = useState('1h');
@@ -108,7 +108,6 @@ export default function DCABotPage() {
   const [quantity, setQuantity] = useState('0.001');
   const [usdtInput, setUsdtInput] = useState('');
   const [pmStartPct, setPmStartPct] = useState('5');
-  const [indicators, setIndicators] = useState<ActiveIndicators>({});
   const queryClient = useQueryClient();
 
   const handleLevelsUpdate = useCallback((long: number[], short: number[]) => {
@@ -495,7 +494,7 @@ export default function DCABotPage() {
               return (
                 <button
                   key={key}
-                  onClick={() => setIndicators(prev => ({ ...prev, [key]: !prev[key] }))}
+                  onClick={() => toggleIndicator(key)}
                   className="flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all"
                   style={{
                     background: active ? `${color}20` : '#0d1220',

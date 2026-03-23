@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback } from 'react';
-import { PriceChart, type ActiveIndicators } from '@/components/charts/PriceChart';
+import { PriceChart } from '@/components/charts/PriceChart';
 import { NeuralLevelsOverlay } from '@/components/charts/NeuralLevelsOverlay';
 import { TickerBar } from '@/components/dashboard/TickerBar';
 import { AccountMetrics } from '@/components/dashboard/AccountMetrics';
@@ -16,7 +16,7 @@ import { PageHelp } from '@/components/ui/page-help';
 import { SymbolSearch } from '@/components/dashboard/SymbolSearch';
 
 export default function DashboardPage() {
-  const { activeExchangeId, selectedSymbol } = useStore();
+  const { activeExchangeId, selectedSymbol, activeIndicators } = useStore();
   const [longLevels, setLongLevels] = useState<number[]>([]);
   const [shortLevels, setShortLevels] = useState<number[]>([]);
 
@@ -94,6 +94,7 @@ export default function DashboardPage() {
                 symbol={selectedSymbol}
                 longLevels={longLevels}
                 shortLevels={shortLevels}
+                indicators={activeIndicators}
                 overlay={
                   <NeuralLevelsOverlay
                     exchangeId={activeExchangeId}

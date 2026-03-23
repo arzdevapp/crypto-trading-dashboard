@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export interface ActiveIndicators {
+  ema9?: boolean;
+  ema21?: boolean;
+  sma50?: boolean;
+  sma200?: boolean;
+  bollinger?: boolean;
+}
+
 interface ExchangeState {
   activeExchangeId: string | null;
   setActiveExchangeId: (id: string | null) => void;
@@ -13,6 +21,12 @@ interface TradingState {
   setSelectedTimeframe: (timeframe: string) => void;
 }
 
+interface ChartState {
+  activeIndicators: ActiveIndicators;
+  setActiveIndicators: (indicators: ActiveIndicators) => void;
+  toggleIndicator: (key: keyof ActiveIndicators) => void;
+}
+
 interface UIState {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -20,7 +34,7 @@ interface UIState {
   setMobileMenuOpen: (open: boolean) => void;
 }
 
-type AppState = ExchangeState & TradingState & UIState;
+type AppState = ExchangeState & TradingState & ChartState & UIState;
 
 export const useStore = create<AppState>()(
   persist(
@@ -35,6 +49,13 @@ export const useStore = create<AppState>()(
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
       setSelectedTimeframe: (timeframe) => set({ selectedTimeframe: timeframe }),
 
+      // Chart indicators
+      activeIndicators: {},
+      setActiveIndicators: (indicators) => set({ activeIndicators: indicators }),
+      toggleIndicator: (key) => set((state) => ({
+        activeIndicators: { ...state.activeIndicators, [key]: !state.activeIndicators[key] },
+      })),
+
       // UI
       sidebarOpen: true,
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -47,6 +68,7 @@ export const useStore = create<AppState>()(
         activeExchangeId: state.activeExchangeId,
         selectedSymbol: state.selectedSymbol,
         selectedTimeframe: state.selectedTimeframe,
+        activeIndicators: state.activeIndicators,
       }),
     }
   )
