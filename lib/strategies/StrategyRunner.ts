@@ -173,8 +173,13 @@ export async function startStrategy(strategyId: string): Promise<void> {
               `Order placed: ${signal.action.toUpperCase()} ${amount} ${record.symbol}${attempt > 1 ? ` (attempt ${attempt})` : ''}`,
               { orderId: order.id, amount, price: signal.price });
 
-            // Order confirmed — persist the new state
+            // Order confirmed — persist the new state and update local config reference
             await persistState(strategyId, config, strategy);
+            // Reload config to get persisted state for next iteration
+            const updated = await prisma.strategy.findUnique({ where: { id: strategyId } });
+            if (updated) {
+              Object.assign(config, JSON.parse(updated.config));
+            }
             lastErr = null;
             break; // success
           } catch (err) {

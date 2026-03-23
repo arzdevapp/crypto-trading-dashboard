@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { startStrategy, stopStrategy, getRunnerStatus, getStrategyInstance } from '@/lib/strategies/StrategyRunner';
 import { getExchangeAdapter } from '@/lib/exchange/ExchangeFactory';
-import type { PowerTraderStrategy } from '@/lib/strategies/implementations/PowerTraderStrategy';
+import type { PowerTraderStrategy, PowerTraderState } from '@/lib/strategies/implementations/PowerTraderStrategy';
 
 // GET — current bot status for a given exchange+symbol, or list all bots
 export async function GET(req: NextRequest) {
@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
 
       const bots = strategies.map(s => {
         const runner = getRunnerStatus(s.id);
-        const instance = getStrategyInstance(s.id) as PowerTraderStrategy | undefined;
-        const powerState = instance?.getState?.() ?? null;
+        const instance = getStrategyInstance(s.id);
+        const powerState = instance && 'getState' in instance ? (instance as { getState: () => PowerTraderState }).getState() : null;
         return {
           id: s.id,
           symbol: s.symbol,
@@ -56,8 +56,8 @@ export async function GET(req: NextRequest) {
     }
 
     const runner = getRunnerStatus(strategy.id);
-    const instance = getStrategyInstance(strategy.id) as PowerTraderStrategy | undefined;
-    const powerState = instance?.getState?.() ?? null;
+    const instance = getStrategyInstance(strategy.id);
+    const powerState = instance && 'getState' in instance ? (instance as { getState: () => PowerTraderState }).getState() : null;
 
     // Fetch live price
     let currentPrice = 0;
@@ -116,10 +116,10 @@ export async function POST(req: NextRequest) {
           },
         });
       } else {
-        // Update config with latest settings
+        // Update config with latest settings, reset status in case it was in error
         strategy = await prisma.strategy.update({
           where: { id: strategy.id },
-          data: { config: JSON.stringify(config), timeframe },
+          data: { config: JSON.stringify(config), timeframe, status: 'stopped' },
         });
       }
 

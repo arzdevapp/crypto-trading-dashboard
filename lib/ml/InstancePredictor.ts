@@ -134,13 +134,31 @@ export class InstancePredictor {
 }
 
 // Global in-memory cache — populated from DB on first access
+// Max 20 symbols to prevent memory leaks in long-running servers
+const MAX_CACHE_SIZE = 20;
 const predictorCache = new Map<string, InstancePredictor>();
+const accessOrder: string[] = [];
 
 export async function getPredictor(symbol: string): Promise<InstancePredictor> {
-  if (!predictorCache.has(symbol)) {
-    const predictor = new InstancePredictor(symbol);
-    await predictor.loadFromDB();
-    predictorCache.set(symbol, predictor);
+  if (predictorCache.has(symbol)) {
+    // Move to end (most recently used)
+    const idx = accessOrder.indexOf(symbol);
+    if (idx > -1) accessOrder.splice(idx, 1);
+    accessOrder.push(symbol);
+    return predictorCache.get(symbol)!;
   }
-  return predictorCache.get(symbol)!;
+
+  // Evict oldest if at capacity
+  if (predictorCache.size >= MAX_CACHE_SIZE) {
+    const oldest = accessOrder.shift();
+    if (oldest) {
+      predictorCache.delete(oldest);
+    }
+  }
+
+  const predictor = new InstancePredictor(symbol);
+  await predictor.loadFromDB();
+  predictorCache.set(symbol, predictor);
+  accessOrder.push(symbol);
+  return predictor;
 }

@@ -128,13 +128,21 @@ export default function DCABotPage() {
   }, [selectedSymbol]);
 
   // Poll current bot status
-  const { data: botStatus } = useQuery<BotStatus>({
+  const { data: botStatus, error: botError } = useQuery<BotStatus>({
     queryKey: ['dca-bot', activeExchangeId, selectedSymbol],
     queryFn: () => fetch(`/api/dca-bot?exchangeId=${activeExchangeId}&symbol=${encodeURIComponent(selectedSymbol)}`).then(r => r.json()),
     enabled: !!activeExchangeId,
     refetchInterval: 5000,
     staleTime: 4000,
+    throwOnError: false,
   });
+
+  // Show error toast when API fails
+  useEffect(() => {
+    if (botError) {
+      toast.error(`DCA Bot Error: ${botError.message}`);
+    }
+  }, [botError]);
 
   // Fetch account balances
   const { data: balanceData } = useQuery<Record<string, { free: number; used: number; total: number }>>({

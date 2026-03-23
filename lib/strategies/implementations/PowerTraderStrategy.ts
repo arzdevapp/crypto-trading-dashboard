@@ -1,5 +1,5 @@
 import { BaseStrategy } from '../BaseStrategy';
-import type { Signal } from '@/types/strategy';
+import type { Signal, StrategyConfig } from '@/types/strategy';
 import type { OHLCVCandle } from '@/types/exchange';
 
 export interface DCALevel {
@@ -28,6 +28,8 @@ export interface PowerTraderState {
   trailingPMLine: number;
   pmActive: boolean;
   lastSignalLevel: number;
+  lastBuyPrice: number;
+  lastBuyTime: number;
 }
 
 export class PowerTraderStrategy extends BaseStrategy {
@@ -44,11 +46,12 @@ export class PowerTraderStrategy extends BaseStrategy {
     trailingPMLine: 0,
     pmActive: false,
     lastSignalLevel: 0,
+    lastBuyPrice: 0,
+    lastBuyTime: 0,
   };
 
-  constructor(config: Record<string, unknown>) {
-    super(config as never);
-    // @ts-ignore
+  constructor(config: StrategyConfig & Record<string, unknown>) {
+    super(config as StrategyConfig);
     this.config = config;
     this.warmupPeriod = 20;
   }
@@ -129,6 +132,8 @@ export class PowerTraderStrategy extends BaseStrategy {
         this.state.dcaStage = 0;
         this.state.dcaCount = 0;
         this.state.pmActive = false;
+        this.state.lastBuyPrice = currentPrice;
+        this.state.lastBuyTime = Date.now();
         return {
           action: 'buy',
           quantity,
@@ -143,8 +148,14 @@ export class PowerTraderStrategy extends BaseStrategy {
     if (this.state.inPosition && this.state.dcaStage < dcaLevels.length) {
       const level = dcaLevels[this.state.dcaStage];
       const gainLossPct = ((currentPrice - this.state.avgCostBasis) / this.state.avgCostBasis) * 100;
+      
+      // Cooldown: at least 1 hour after entry or last DCA before hard trigger can fire
+      const timeSinceLastBuy = Date.now() - this.state.lastBuyTime;
+      const minCooldownMs = 60 * 60 * 1000; // 1 hour
+      const hardTriggerCooldown = timeSinceLastBuy < minCooldownMs;
+      
       const neuralTriggered = neuralLongLevel >= level.neuralTrigger && gainLossPct < 0;
-      const hardTriggered = gainLossPct <= level.hardPctTrigger;
+      const hardTriggered = !hardTriggerCooldown && gainLossPct <= level.hardPctTrigger;
 
       if (neuralTriggered || hardTriggered) {
         const dcaQty = quantity * level.multiplier;
@@ -159,6 +170,8 @@ export class PowerTraderStrategy extends BaseStrategy {
         this.state.dcaStage++;
         this.state.dcaCount++;
         this.state.pmActive = false; // reset trailing on DCA
+        this.state.lastBuyPrice = currentPrice;
+        this.state.lastBuyTime = Date.now();
 
         return { action: 'buy', quantity: dcaQty, price: currentPrice, reason };
       }
