@@ -106,8 +106,7 @@ export default function DCABotPage() {
   const [timeframe, setTimeframe] = useState('1h');
   const [tradeStartLevel, setTradeStartLevel] = useState('3');
   const [quantity, setQuantity] = useState('0.001');
-  const [budgetUsdt, setBudgetUsdt] = useState('');
-  const [budgetMode, setBudgetMode] = useState<'usdt' | 'qty'>('qty');
+  const [usdtInput, setUsdtInput] = useState('');
   const [pmStartPct, setPmStartPct] = useState('5');
   const [indicators, setIndicators] = useState<ActiveIndicators>({});
   const queryClient = useQueryClient();
@@ -125,6 +124,19 @@ export default function DCABotPage() {
     refetchInterval: 5000,
     staleTime: 4000,
   });
+
+  // Fetch account balances
+  const { data: balanceData } = useQuery<Record<string, { free: number; used: number; total: number }>>({
+    queryKey: ['balance', activeExchangeId],
+    queryFn: () => fetch(`/api/exchanges/${activeExchangeId}/balance`).then(r => r.json()),
+    enabled: !!activeExchangeId,
+    refetchInterval: 30000,
+    staleTime: 25000,
+  });
+  const quoteAsset = selectedSymbol.split('/')[1] ?? 'USDT';
+  const baseAsset  = selectedSymbol.split('/')[0];
+  const freeQuote  = balanceData?.[quoteAsset]?.free ?? 0;
+  const freeBase   = balanceData?.[baseAsset]?.free  ?? 0;
 
   // Poll all bots list
   const { data: allBotsData } = useQuery<{ bots: BotListItem[] }>({
@@ -327,91 +339,109 @@ export default function DCABotPage() {
             />
           </div>
 
-          {/* Budget / Order Size */}
+          {/* Order Size — account-aware */}
           <div className="space-y-2">
-            {/* Mode toggle */}
-            <div className="flex items-center gap-0 rounded overflow-hidden border" style={{ borderColor: '#243044' }}>
-              <button
-                className="flex-1 text-[9px] font-mono font-bold py-1 transition-colors"
-                style={{
-                  background: budgetMode === 'usdt' ? '#00E5FF20' : '#121C2F',
-                  color: budgetMode === 'usdt' ? '#00E5FF' : '#6b7280',
-                }}
-                onClick={() => !running && setBudgetMode('usdt')}
-                disabled={running}
-              >
-                $ USDT BUDGET
-              </button>
-              <button
-                className="flex-1 text-[9px] font-mono font-bold py-1 transition-colors"
-                style={{
-                  background: budgetMode === 'qty' ? '#00E5FF20' : '#121C2F',
-                  color: budgetMode === 'qty' ? '#00E5FF' : '#6b7280',
-                }}
-                onClick={() => !running && setBudgetMode('qty')}
-                disabled={running}
-              >
-                QTY ({selectedSymbol.split('/')[0]})
-              </button>
+            <div className="flex items-center justify-between">
+              <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Order Size per trade</Label>
             </div>
 
-            {budgetMode === 'usdt' ? (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Total Budget</Label>
-                  <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>USDT</span>
+            {/* Available balance */}
+            <div className="rounded px-2 py-1.5 space-y-0.5" style={{ background: '#060d18', border: '1px solid #1a2538' }}>
+              <div className="flex justify-between text-[9px] font-mono">
+                <span style={{ color: '#6b7280' }}>Available {quoteAsset}</span>
+                <span style={{ color: freeQuote > 0 ? '#9ca3af' : '#374151' }}>
+                  {freeQuote > 0 ? `$${freeQuote.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                </span>
+              </div>
+              {freeBase > 0 && (
+                <div className="flex justify-between text-[9px] font-mono">
+                  <span style={{ color: '#6b7280' }}>Available {baseAsset}</span>
+                  <span style={{ color: '#9ca3af' }}>{freeBase.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} {baseAsset}</span>
                 </div>
+              )}
+            </div>
+
+            {/* % quick-select buttons */}
+            {freeQuote > 0 && currentPrice > 0 && !running && (
+              <div className="grid grid-cols-4 gap-1">
+                {[25, 50, 75, 100].map(pct => (
+                  <button
+                    key={pct}
+                    className="text-[9px] font-mono font-bold py-1 rounded transition-all"
+                    style={{ background: '#121C2F', border: '1px solid #1e2d45', color: '#6b7280' }}
+                    onMouseEnter={e => { (e.target as HTMLElement).style.color = '#00E5FF'; (e.target as HTMLElement).style.borderColor = '#00E5FF40'; }}
+                    onMouseLeave={e => { (e.target as HTMLElement).style.color = '#6b7280'; (e.target as HTMLElement).style.borderColor = '#1e2d45'; }}
+                    onClick={() => {
+                      const allocated = (freeQuote * pct) / 100;
+                      const perTradeQty = allocated / 7 / currentPrice;
+                      setQuantity(perTradeQty.toFixed(6));
+                      setUsdtInput((allocated).toFixed(2));
+                    }}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Dual input: USDT ↔ Coin qty */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <div>
+                <div className="text-[9px] font-mono mb-1" style={{ color: '#6b7280' }}>Total budget ({quoteAsset})</div>
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono" style={{ color: '#6b7280' }}>$</span>
+                  <Input
+                    className="h-7 text-xs font-mono pl-5"
+                    type="number" step="10" min="0"
+                    placeholder="0.00"
+                    value={usdtInput}
+                    onChange={e => {
+                      setUsdtInput(e.target.value);
+                      const usdt = parseFloat(e.target.value);
+                      if (usdt > 0 && currentPrice > 0) {
+                        setQuantity(((usdt / 7) / currentPrice).toFixed(6));
+                      }
+                    }}
+                    disabled={running}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="text-[9px] font-mono mb-1" style={{ color: '#6b7280' }}>Qty per trade ({baseAsset})</div>
                 <Input
                   className="h-7 text-xs font-mono"
-                  type="number" step="10" min="1"
-                  placeholder="e.g. 500"
-                  value={budgetUsdt}
+                  type="number" step="0.000001" min="0"
+                  placeholder="0.000000"
+                  value={quantity}
                   onChange={e => {
-                    setBudgetUsdt(e.target.value);
-                    const budget = parseFloat(e.target.value);
-                    if (budget > 0 && currentPrice > 0) {
-                      const perTradeQty = (budget / 7) / currentPrice;
-                      setQuantity(perTradeQty.toFixed(6));
+                    setQuantity(e.target.value);
+                    const qty = parseFloat(e.target.value);
+                    if (qty > 0 && currentPrice > 0) {
+                      setUsdtInput((qty * 7 * currentPrice).toFixed(2));
                     }
                   }}
                   disabled={running}
                 />
-                {budgetUsdt && currentPrice > 0 && (
-                  <div className="mt-1.5 space-y-0.5">
-                    <div className="flex justify-between text-[9px] font-mono">
-                      <span style={{ color: '#6b7280' }}>Per trade</span>
-                      <span style={{ color: '#9ca3af' }}>{quantity} {selectedSymbol.split('/')[0]} ≈ ${(parseFloat(quantity) * currentPrice).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-[9px] font-mono">
-                      <span style={{ color: '#6b7280' }}>Max exposure (×7)</span>
-                      <span style={{ color: '#f59e0b' }}>${parseFloat(budgetUsdt).toFixed(2)}</span>
-                    </div>
-                  </div>
-                )}
               </div>
-            ) : (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Order Size per trade</Label>
-                  <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>{selectedSymbol.split('/')[0]}</span>
+            </div>
+
+            {/* Exposure summary */}
+            {parseFloat(quantity) > 0 && currentPrice > 0 && (
+              <div className="rounded px-2 py-1.5 space-y-0.5" style={{ background: '#060d18', border: '1px solid #1a2538' }}>
+                <div className="flex justify-between text-[9px] font-mono">
+                  <span style={{ color: '#6b7280' }}>Per trade</span>
+                  <span style={{ color: '#C7D1DB' }}>{parseFloat(quantity).toFixed(6)} {baseAsset} ≈ <span style={{ color: '#9ca3af' }}>${(parseFloat(quantity) * currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
                 </div>
-                <Input
-                  className="h-7 text-xs font-mono"
-                  type="number" step="0.0001"
-                  value={quantity}
-                  onChange={e => setQuantity(e.target.value)}
-                  disabled={running}
-                />
-                {parseFloat(quantity) > 0 && currentPrice > 0 && (
-                  <div className="mt-1.5 space-y-0.5">
-                    <div className="flex justify-between text-[9px] font-mono">
-                      <span style={{ color: '#6b7280' }}>Per trade value</span>
-                      <span style={{ color: '#9ca3af' }}>≈ ${(parseFloat(quantity) * currentPrice).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-[9px] font-mono">
-                      <span style={{ color: '#6b7280' }}>Max exposure (×7)</span>
-                      <span style={{ color: '#f59e0b' }}>≈ ${(parseFloat(quantity) * 7 * currentPrice).toFixed(2)}</span>
-                    </div>
+                <div className="flex justify-between text-[9px] font-mono">
+                  <span style={{ color: '#6b7280' }}>Max exposure (×7 DCA)</span>
+                  <span style={{ color: '#f59e0b' }}>${(parseFloat(quantity) * 7 * currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                {freeQuote > 0 && (
+                  <div className="flex justify-between text-[9px] font-mono">
+                    <span style={{ color: '#6b7280' }}>% of balance used</span>
+                    <span style={{ color: (parseFloat(quantity) * 7 * currentPrice) / freeQuote > 0.8 ? '#ef4444' : '#9ca3af' }}>
+                      {Math.min(100, ((parseFloat(quantity) * 7 * currentPrice) / freeQuote * 100)).toFixed(1)}%
+                    </span>
                   </div>
                 )}
               </div>
