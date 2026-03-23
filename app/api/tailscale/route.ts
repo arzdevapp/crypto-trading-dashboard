@@ -23,6 +23,19 @@ export interface TailscalePeer {
   active: boolean;
 }
 
+export async function POST(req: Request) {
+  try {
+    const { action } = await req.json() as { action: 'up' | 'down' };
+    if (action !== 'up' && action !== 'down') {
+      return NextResponse.json({ error: 'action must be "up" or "down"' }, { status: 400 });
+    }
+    await execAsync(`tailscale ${action}`, { timeout: 15000 });
+    return NextResponse.json({ success: true, action });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
+
 export async function GET() {
   try {
     const { stdout } = await execAsync('tailscale status --json', { timeout: 5000 });
