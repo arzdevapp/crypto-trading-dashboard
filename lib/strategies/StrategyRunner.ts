@@ -38,8 +38,41 @@ export function setStatusCallback(cb: StatusCallback) {
   statusCallback = cb;
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/** Returns true for errors likely caused by transient conditions that are worth retrying. */
+function isTransientError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('timeout') ||
+    msg.includes('network') ||
+    msg.includes('econnreset') ||
+    msg.includes('econnrefused') ||
+    msg.includes('rate limit') ||
+    msg.includes('too many requests') ||
+    msg.includes('429') ||
+    msg.includes('503') ||
+    msg.includes('502') ||
+    msg.includes('temporary')
+  );
+}
+
+/** Returns true for errors that mean the order was definitely not placed (no retry needed). */
+function isPermanentError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('insufficient') ||
+    msg.includes('not enough') ||
+    msg.includes('balance') ||
+    msg.includes('minimum') ||
+    msg.includes('invalid symbol') ||
+    msg.includes('market is closed') ||
+    msg.includes('permission')
+  );
+}
+
 /** Persist the strategy's in-memory position state to the DB config so it
- *  survives server restarts. Only called after buy/sell signals. */
+ *  survives server restarts. Only called after confirmed buy/sell orders. */
 async function persistState(strategyId: string, config: Record<string, unknown>, strategy: BaseStrategy): Promise<void> {
   if (!('getState' in strategy)) return;
   const savedState = (strategy as unknown as StatefulStrategy).getState();
@@ -96,6 +129,13 @@ export async function startStrategy(strategyId: string): Promise<void> {
         } catch { /* non-fatal */ }
       }
 
+      // Snapshot state BEFORE computing the signal so we can revert if the order fails.
+      // computeSignal() mutates internal state (sets inPosition, updates avgCostBasis, etc.)
+      // before the actual exchange order is placed, which would leave the bot desynced.
+      const stateSnapshot = ('getState' in strategy)
+        ? (strategy as unknown as StatefulStrategy).getState()
+        : null;
+
       const signal = await strategy.onCandle(candles[candles.length - 1]);
       runner.lastSignal = signal;
       statusCallback?.(strategyId, 'running', signal);
@@ -105,20 +145,76 @@ export async function startStrategy(strategyId: string): Promise<void> {
       if (signal.action !== 'hold') {
         const amount = signal.quantity ?? config.quantity ?? 0.001;
 
-        // Guard: skip order if amount is zero or not a valid number
+        // Guard: skip if amount is invalid
         if (!amount || isNaN(amount) || amount <= 0) {
+          // Revert state — no order will be placed
+          if (stateSnapshot && 'restoreState' in strategy) {
+            (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+            await persistState(strategyId, config, strategy);
+          }
           await log('warn', `strategy:${strategyId}`, `Skipping ${signal.action} — invalid amount: ${amount}`);
-        } else {
-          const order = await adapter.placeOrder({
-            symbol: record.symbol,
-            type: 'market',
-            side: signal.action as 'buy' | 'sell',
-            amount,
-          });
-          await log('trade', `strategy:${strategyId}`, `Order placed: ${signal.action.toUpperCase()} ${record.symbol}`, { orderId: order.id, amount, price: signal.price });
+          return;
+        }
 
-          // Persist position state after every trade so restarts don't lose context
-          await persistState(strategyId, config, strategy);
+        // Attempt order with retry for transient failures (max 3 attempts, exponential backoff)
+        const MAX_RETRIES = 3;
+        let lastErr: Error | null = null;
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const order = await adapter.placeOrder({
+              symbol: record.symbol,
+              type: 'market',
+              side: signal.action as 'buy' | 'sell',
+              amount,
+            });
+
+            await log('trade', `strategy:${strategyId}`,
+              `Order placed: ${signal.action.toUpperCase()} ${amount} ${record.symbol}${attempt > 1 ? ` (attempt ${attempt})` : ''}`,
+              { orderId: order.id, amount, price: signal.price });
+
+            // Order confirmed — persist the new state
+            await persistState(strategyId, config, strategy);
+            lastErr = null;
+            break; // success
+          } catch (err) {
+            lastErr = err instanceof Error ? err : new Error(String(err));
+
+            // Permanent error (e.g. insufficient funds) — no point retrying
+            if (isPermanentError(lastErr)) break;
+
+            // Transient error — wait and retry
+            if (isTransientError(lastErr) && attempt < MAX_RETRIES) {
+              const wait = attempt * 2000; // 2s → 4s
+              await log('warn', `strategy:${strategyId}`,
+                `Order attempt ${attempt} failed (${lastErr.message}) — retrying in ${wait / 1000}s`);
+              await sleep(wait);
+              continue;
+            }
+
+            break; // unknown error — don't retry
+          }
+        }
+
+        // All attempts failed — revert strategy state to keep it in sync with the exchange
+        if (lastErr) {
+          if (stateSnapshot && 'restoreState' in strategy) {
+            (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+            await persistState(strategyId, config, strategy); // persist reverted state
+          }
+
+          const isSell = signal.action === 'sell';
+          await log('error', `strategy:${strategyId}`,
+            `${isSell ? '⚠️ SELL' : 'BUY'} order failed after ${MAX_RETRIES} attempt(s): ${lastErr.message} — state reverted`,
+            { action: signal.action, amount, symbol: record.symbol });
+
+          // Sell failures need special handling — the bot is still holding coins but
+          // the trailing stop fired. Keep the runner alive so it can re-attempt on the
+          // next candle when the price crosses the trailing line again.
+          if (isSell) {
+            statusCallback?.(strategyId, 'running', undefined,
+              `Sell failed: ${lastErr.message} — still holding position, will retry`);
+          }
         }
       }
     } catch (err) {
