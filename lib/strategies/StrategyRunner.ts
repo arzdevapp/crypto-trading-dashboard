@@ -6,10 +6,17 @@ import { getPredictor } from '../ml/InstancePredictor';
 import { getNewsSentiment } from '../news/NewsSentimentScorer';
 import type { Signal, StrategyStatus } from '@/types/strategy';
 import type { BaseStrategy } from './BaseStrategy';
+
 // Shared interface for strategies that accept injected neural + news signals
 interface NeuralAwareStrategy {
   setNeuralLevels(long: number, short: number): void;
   setNewsSentiment(score: number, label: string): void;
+}
+
+// Stateful strategies that can persist/restore position state across restarts
+interface StatefulStrategy {
+  getState(): Record<string, unknown>;
+  restoreState(state: Record<string, unknown>): void;
 }
 
 interface RunnerState {
@@ -31,6 +38,18 @@ export function setStatusCallback(cb: StatusCallback) {
   statusCallback = cb;
 }
 
+/** Persist the strategy's in-memory position state to the DB config so it
+ *  survives server restarts. Only called after buy/sell signals. */
+async function persistState(strategyId: string, config: Record<string, unknown>, strategy: BaseStrategy): Promise<void> {
+  if (!('getState' in strategy)) return;
+  const savedState = (strategy as unknown as StatefulStrategy).getState();
+  const updatedConfig = { ...config, _savedState: savedState };
+  await prisma.strategy.update({
+    where: { id: strategyId },
+    data: { config: JSON.stringify(updatedConfig) },
+  }).catch(() => {}); // non-fatal — worst case state is lost on restart
+}
+
 export async function startStrategy(strategyId: string): Promise<void> {
   if (runners.has(strategyId)) throw new Error('Strategy already running');
 
@@ -42,6 +61,12 @@ export async function startStrategy(strategyId: string): Promise<void> {
   const adapter = await getExchangeAdapter(record.exchangeId);
 
   await strategy.initialize((limit) => adapter.fetchOHLCV(record.symbol, record.timeframe, limit));
+
+  // Restore persisted position state (survives server restarts)
+  if (config._savedState && 'restoreState' in strategy) {
+    (strategy as unknown as StatefulStrategy).restoreState(config._savedState);
+    await log('info', `strategy:${strategyId}`, 'Restored saved position state from DB');
+  }
 
   await prisma.strategy.update({ where: { id: strategyId }, data: { status: 'running' } });
   statusCallback?.(strategyId, 'running');
@@ -79,13 +104,22 @@ export async function startStrategy(strategyId: string): Promise<void> {
 
       if (signal.action !== 'hold') {
         const amount = signal.quantity ?? config.quantity ?? 0.001;
-        const order = await adapter.placeOrder({
-          symbol: record.symbol,
-          type: 'market',
-          side: signal.action as 'buy' | 'sell',
-          amount,
-        });
-        await log('trade', `strategy:${strategyId}`, `Order placed: ${signal.action.toUpperCase()} ${record.symbol}`, { orderId: order.id, amount, price: signal.price });
+
+        // Guard: skip order if amount is zero or not a valid number
+        if (!amount || isNaN(amount) || amount <= 0) {
+          await log('warn', `strategy:${strategyId}`, `Skipping ${signal.action} — invalid amount: ${amount}`);
+        } else {
+          const order = await adapter.placeOrder({
+            symbol: record.symbol,
+            type: 'market',
+            side: signal.action as 'buy' | 'sell',
+            amount,
+          });
+          await log('trade', `strategy:${strategyId}`, `Order placed: ${signal.action.toUpperCase()} ${record.symbol}`, { orderId: order.id, amount, price: signal.price });
+
+          // Persist position state after every trade so restarts don't lose context
+          await persistState(strategyId, config, strategy);
+        }
       }
     } catch (err) {
       if (!runners.has(strategyId)) return; // Deleted during execution — don't overwrite status

@@ -43,6 +43,7 @@ export class GridTradingStrategy extends BaseStrategy {
         return { action: 'buy', quantity, price: level, reason: `Grid buy at level ${level.toFixed(2)}` };
       }
       if (this.lastBuyLevel !== null && prevPrice < level && price >= level && price < upperPrice) {
+        this.lastBuyLevel = null; // reset so we don't sell again without a new buy
         return { action: 'sell', quantity, price: level, reason: `Grid sell at level ${level.toFixed(2)}` };
       }
     }

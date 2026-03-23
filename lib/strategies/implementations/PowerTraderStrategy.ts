@@ -58,7 +58,7 @@ export class PowerTraderStrategy extends BaseStrategy {
     const tradeStartLevel = cfg.tradeStartLevel as number ?? 3;
     const pmStartPct = cfg.pmStartPct as number ?? 5.0;
     const pmStartPctDCA = cfg.pmStartPctDCA as number ?? 2.5;
-    const trailingGapPct = cfg.trailingGapPct as number ?? 0.5;
+    const trailingGapPct = cfg.trailingGapPct as number ?? 1.5;
     const quantity = cfg.quantity as number ?? 0.001;
 
     // Neural signal levels injected by StrategyRunner before each candle
@@ -183,5 +183,9 @@ export class PowerTraderStrategy extends BaseStrategy {
 
   getState(): PowerTraderState {
     return { ...this.state };
+  }
+
+  restoreState(saved: Partial<PowerTraderState>): void {
+    this.state = { ...this.state, ...saved };
   }
 }
