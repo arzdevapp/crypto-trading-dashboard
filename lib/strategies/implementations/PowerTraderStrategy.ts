@@ -95,14 +95,21 @@ export class PowerTraderStrategy extends BaseStrategy {
           this.state.trailingPeak = currentPrice;
           this.state.trailingPMLine = currentPrice * (1 - trailingGapPct / 100);
         } else if (currentPrice < this.state.trailingPMLine) {
-          // Cross: price dropped below trailing line → SELL
+          // Cross: price dropped below trailing line → SELL entire accumulated position
+          const sellQty = this.state.positionSize;
+          const pmLine = this.state.trailingPMLine;
           this.state.inPosition = false;
           this.state.pmActive = false;
           this.state.trailingPeak = 0;
+          this.state.trailingPMLine = 0;
+          this.state.positionSize = 0;
+          this.state.avgCostBasis = 0;
+          this.state.dcaStage = 0;
+          this.state.dcaCount = 0;
           return {
             action: 'sell',
-            quantity,
-            reason: `Trailing PM sell at ${currentPrice.toFixed(2)} (PM line: ${this.state.trailingPMLine.toFixed(2)})`,
+            quantity: sellQty,
+            reason: `Trailing PM sell at ${currentPrice.toFixed(2)} (PM line: ${pmLine.toFixed(2)}) — sold ${sellQty.toFixed(6)} ${String(cfg.symbol ?? '')} total`,
           };
         }
       }

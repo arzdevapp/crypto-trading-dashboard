@@ -90,6 +90,9 @@ export async function startStrategy(strategyId: string): Promise<void> {
     } catch (err) {
       if (!runners.has(strategyId)) return; // Deleted during execution — don't overwrite status
       const error = err instanceof Error ? err.message : String(err);
+      // Stop the runner so we don't keep spamming errors on every interval tick
+      clearInterval(interval);
+      runners.delete(strategyId);
       await prisma.strategy.update({ where: { id: strategyId }, data: { status: 'error' } }).catch(() => {});
       statusCallback?.(strategyId, 'error', undefined, error);
       await log('error', `strategy:${strategyId}`, `Strategy error: ${error}`, { strategyId });
