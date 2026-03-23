@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Brain, RefreshCw, Zap, Square, Activity, Eye, Trash2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { NewsSentimentWidget } from '@/components/news/NewsSentimentWidget';
-import { HorizontalSplit } from '@/components/ui/resizable';
+import { HorizontalSplit, VerticalSplit } from '@/components/ui/resizable';
 import { PageHelp } from '@/components/ui/page-help';
 import { formatCurrency, formatCrypto, formatPercent } from '@/lib/utils';
 
@@ -442,178 +442,160 @@ export default function DCABotPage() {
       </div>
   );
 
-  const rightContent = (
-      <div className="flex flex-col h-full min-w-0">
+  // ── Ticker bar (shared between chart and position panel) ──
+  const tickerBar = (
+    <div className="flex items-center gap-4 px-4 py-2 border-b flex-shrink-0 flex-wrap gap-y-1" style={{ borderColor: '#1a2538', background: '#070B10' }}>
+      <div className="flex items-center gap-2">
+        <span className="text-base font-mono font-bold" style={{ color: '#E6EDF3' }}>
+          {currentPrice > 0 ? formatCurrency(currentPrice) : '—'}
+        </span>
+        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a2538', color: '#9ca3af' }}>
+          {selectedSymbol}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-2 h-2 rounded-full" style={{ background: running ? '#00FF66' : '#374151', boxShadow: running ? '0 0 6px #00FF66' : 'none' }} />
+        <span className="text-[10px] font-mono font-bold" style={{ color: running ? '#00FF66' : '#6b7280' }}>
+          {running ? 'RUNNING' : 'STOPPED'}
+        </span>
+      </div>
+      {ps?.inPosition ? (
+        <div className="flex items-center gap-3 ml-2">
+          <span className="text-[10px] font-mono" style={{ color: '#6b7280' }}>IN POSITION</span>
+          <span className="text-[10px] font-mono font-bold" style={{ color: pnl >= 0 ? '#00FF66' : '#ef4444' }}>
+            {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} ({pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+          </span>
+        </div>
+      ) : running ? (
+        <span className="text-[10px] font-mono" style={{ color: '#6b7280' }}>waiting for entry signal…</span>
+      ) : null}
+      {botStatus?.lastSignal && (
+        <div className="ml-auto flex items-center gap-1.5">
+          <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>LAST SIGNAL</span>
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded" style={{
+            background: botStatus.lastSignal.action === 'buy' ? '#00FF6615' : botStatus.lastSignal.action === 'sell' ? '#ef444415' : '#1a2538',
+            color: botStatus.lastSignal.action === 'buy' ? '#00FF66' : botStatus.lastSignal.action === 'sell' ? '#ef4444' : '#6b7280',
+          }}>
+            {botStatus.lastSignal.action.toUpperCase()}
+          </span>
+          {botStatus.lastSignal.reason && (
+            <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>{botStatus.lastSignal.reason}</span>
+          )}
+        </div>
+      )}
+      {botStatus?.error && (
+        <span className="text-[10px] font-mono ml-auto" style={{ color: '#ef4444' }}>⚠ {botStatus.error}</span>
+      )}
+    </div>
+  );
 
-        {/* Live price ticker bar */}
-        <div className="flex items-center gap-4 px-4 py-2 border-b flex-shrink-0 flex-wrap gap-y-1" style={{ borderColor: '#1a2538', background: '#070B10' }}>
-          <div className="flex items-center gap-2">
-            <span className="text-base font-mono font-bold" style={{ color: '#E6EDF3' }}>
-              {currentPrice > 0 ? formatCurrency(currentPrice) : '—'}
-            </span>
-            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a2538', color: '#9ca3af' }}>
-              {selectedSymbol}
-            </span>
+  // ── Position dashboard panel ──
+  const positionPanel = (
+    <div className="h-full overflow-auto border-t" style={{ borderColor: '#1a2538' }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0" style={{ borderColor: '#1a2538', background: '#0A1220' }}>
+        <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
+          <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#6b7280' }}>Current Price</div>
+          <div className="text-sm font-mono font-bold" style={{ color: '#E6EDF3' }}>
+            {currentPrice > 0 ? formatCurrency(currentPrice) : '—'}
           </div>
-
-          {/* Bot status pill */}
-          <div className="flex items-center gap-1.5">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{
-                background: running ? '#00FF66' : '#374151',
-                boxShadow: running ? '0 0 6px #00FF66' : 'none',
-              }}
-            />
-            <span className="text-[10px] font-mono font-bold" style={{ color: running ? '#00FF66' : '#6b7280' }}>
-              {running ? 'RUNNING' : 'STOPPED'}
-            </span>
+          {ps?.inPosition && ps.avgCostBasis > 0 && (
+            <div className="text-[9px] font-mono mt-0.5" style={{ color: '#6b7280' }}>
+              Avg entry: <span style={{ color: '#9ca3af' }}>{formatCurrency(ps.avgCostBasis)}</span>
+            </div>
+          )}
+        </div>
+        <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
+          <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#6b7280' }}>Position Size</div>
+          <div className="text-sm font-mono font-bold" style={{ color: ps?.inPosition ? '#C7D1DB' : '#374151' }}>
+            {ps?.inPosition ? formatCrypto(ps.positionSize, 6) : '—'}
           </div>
-
-          {/* Position status */}
+          {ps?.inPosition && (
+            <div className="text-[9px] font-mono mt-0.5" style={{ color: '#6b7280' }}>
+              Value: <span style={{ color: '#9ca3af' }}>{formatCurrency(positionValue)}</span>
+              {' · '}Cost: <span style={{ color: '#9ca3af' }}>{formatCurrency(costBasisValue)}</span>
+            </div>
+          )}
+        </div>
+        <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
+          <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#6b7280' }}>Unrealised P&L</div>
           {ps?.inPosition ? (
-            <div className="flex items-center gap-3 ml-2">
-              <span className="text-[10px] font-mono" style={{ color: '#6b7280' }}>
-                IN POSITION
-              </span>
-              <span className="text-[10px] font-mono font-bold" style={{ color: pnl >= 0 ? '#00FF66' : '#ef4444' }}>
-                {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} ({pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
-              </span>
-            </div>
-          ) : running ? (
-            <span className="text-[10px] font-mono" style={{ color: '#6b7280' }}>waiting for entry signal…</span>
-          ) : null}
-
-          {/* Last signal */}
-          {botStatus?.lastSignal && (
-            <div className="ml-auto flex items-center gap-1.5">
-              <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>LAST SIGNAL</span>
-              <span
-                className="text-[10px] font-mono font-bold px-2 py-0.5 rounded"
-                style={{
-                  background: botStatus.lastSignal.action === 'buy' ? '#00FF6615' : botStatus.lastSignal.action === 'sell' ? '#ef444415' : '#1a2538',
-                  color: botStatus.lastSignal.action === 'buy' ? '#00FF66' : botStatus.lastSignal.action === 'sell' ? '#ef4444' : '#6b7280',
-                }}
-              >
-                {botStatus.lastSignal.action.toUpperCase()}
-              </span>
-              {botStatus.lastSignal.reason && (
-                <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>{botStatus.lastSignal.reason}</span>
-              )}
-            </div>
-          )}
-
-          {botStatus?.error && (
-            <span className="text-[10px] font-mono ml-auto" style={{ color: '#ef4444' }}>⚠ {botStatus.error}</span>
+            <>
+              <div className="flex items-center gap-1.5">
+                {pnl > 0 ? <TrendingUp className="w-4 h-4" style={{ color: '#00FF66' }} /> :
+                 pnl < 0 ? <TrendingDown className="w-4 h-4" style={{ color: '#ef4444' }} /> :
+                 <Minus className="w-4 h-4" style={{ color: '#6b7280' }} />}
+                <span className="text-sm font-mono font-bold" style={{ color: pnl >= 0 ? '#00FF66' : '#ef4444' }}>
+                  {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
+                </span>
+              </div>
+              <div className="text-[9px] font-mono mt-0.5 font-bold" style={{ color: pnlPct >= 0 ? '#00FF66' : '#ef4444' }}>
+                {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+              </div>
+            </>
+          ) : (
+            <div className="text-sm font-mono font-bold" style={{ color: '#374151' }}>—</div>
           )}
         </div>
-
-        {/* Chart */}
-        <div className="flex-1 min-h-0" style={{ minHeight: 280 }}>
-          <PriceChart
-            exchangeId={activeExchangeId}
-            symbol={selectedSymbol}
-            longLevels={longLevels}
-            shortLevels={shortLevels}
-            indicators={indicators}
-            overlay={
-              <NeuralLevelsOverlay
-                exchangeId={activeExchangeId}
-                symbol={selectedSymbol}
-                onLevelsUpdate={handleLevelsUpdate}
-              />
-            }
-          />
-        </div>
-
-        {/* ── Position Dashboard ── */}
-        <div className="flex-shrink-0 border-t" style={{ borderColor: '#1a2538' }}>
-
-          {/* Position metrics row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0" style={{ borderColor: '#1a2538', background: '#0A1220' }}>
-
-            {/* Market Price + position value */}
-            <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
-              <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#6b7280' }}>Current Price</div>
-              <div className="text-sm font-mono font-bold" style={{ color: '#E6EDF3' }}>
-                {currentPrice > 0 ? formatCurrency(currentPrice) : '—'}
-              </div>
-              {ps?.inPosition && ps.avgCostBasis > 0 && (
-                <div className="text-[9px] font-mono mt-0.5" style={{ color: '#6b7280' }}>
-                  Avg entry: <span style={{ color: '#9ca3af' }}>{formatCurrency(ps.avgCostBasis)}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Position size + value */}
-            <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
-              <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#6b7280' }}>Position Size</div>
-              <div className="text-sm font-mono font-bold" style={{ color: ps?.inPosition ? '#C7D1DB' : '#374151' }}>
-                {ps?.inPosition ? formatCrypto(ps.positionSize, 6) : '—'}
-              </div>
-              {ps?.inPosition && (
-                <div className="text-[9px] font-mono mt-0.5" style={{ color: '#6b7280' }}>
-                  Value: <span style={{ color: '#9ca3af' }}>{formatCurrency(positionValue)}</span>
-                  {' · '}Cost: <span style={{ color: '#9ca3af' }}>{formatCurrency(costBasisValue)}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Unrealised P&L */}
-            <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
-              <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#6b7280' }}>Unrealised P&L</div>
-              {ps?.inPosition ? (
-                <>
-                  <div className="flex items-center gap-1.5">
-                    {pnl > 0 ? <TrendingUp className="w-4 h-4" style={{ color: '#00FF66' }} /> :
-                     pnl < 0 ? <TrendingDown className="w-4 h-4" style={{ color: '#ef4444' }} /> :
-                     <Minus className="w-4 h-4" style={{ color: '#6b7280' }} />}
-                    <span className="text-sm font-mono font-bold" style={{ color: pnl >= 0 ? '#00FF66' : '#ef4444' }}>
-                      {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
-                    </span>
-                  </div>
-                  <div className="text-[9px] font-mono mt-0.5 font-bold" style={{ color: pnlPct >= 0 ? '#00FF66' : '#ef4444' }}>
-                    {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
-                  </div>
-                </>
-              ) : (
-                <div className="text-sm font-mono font-bold" style={{ color: '#374151' }}>—</div>
-              )}
-            </div>
-
-            {/* DCA Stage + trailing */}
-            <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
-              <div className="flex items-center justify-between mb-1">
-                <div className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>DCA Progress</div>
-                {ps && ps.dcaStage > 0 && (
-                  <span className="text-[9px] font-mono font-bold" style={{ color: '#9ca3af' }}>{ps.dcaStage}/7</span>
-                )}
-              </div>
-              <DcaTrack stage={ps?.dcaStage ?? 0} active={ps?.inPosition ?? false} />
-              <div className="text-[9px] font-mono mt-1.5" style={{ color: '#6b7280' }}>
-                {ps?.pmActive
-                  ? <span style={{ color: '#00FF66' }}>Trailing TP @ {formatCurrency(ps.trailingPMLine)}</span>
-                  : ps?.inPosition
-                    ? <span style={{ color: '#9ca3af' }}>Waiting for profit margin</span>
-                    : <span style={{ color: '#374151' }}>No open position</span>}
-              </div>
-            </div>
-          </div>
-
-          {/* Neural signal bars */}
-          <div className="flex items-center gap-6 px-4 py-3 border-t flex-wrap" style={{ borderColor: '#1a2538', background: '#070B10' }}>
-            <div className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Neural Signals</div>
-            <SignalBar count={longSignalCount} color="#3b82f6" label="LONG" />
-            <SignalBar count={shortSignalCount} color="#f97316" label="SHORT" />
-            {running && (
-              <div className="ml-auto flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#00FF66' }} />
-                <span className="text-[9px] font-mono" style={{ color: '#00FF66' }}>LIVE</span>
-              </div>
+        <div className="px-4 py-3" style={{ borderColor: '#1a2538' }}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>DCA Progress</div>
+            {ps && ps.dcaStage > 0 && (
+              <span className="text-[9px] font-mono font-bold" style={{ color: '#9ca3af' }}>{ps.dcaStage}/7</span>
             )}
+          </div>
+          <DcaTrack stage={ps?.dcaStage ?? 0} active={ps?.inPosition ?? false} />
+          <div className="text-[9px] font-mono mt-1.5" style={{ color: '#6b7280' }}>
+            {ps?.pmActive
+              ? <span style={{ color: '#00FF66' }}>Trailing TP @ {formatCurrency(ps.trailingPMLine)}</span>
+              : ps?.inPosition
+                ? <span style={{ color: '#9ca3af' }}>Waiting for profit margin</span>
+                : <span style={{ color: '#374151' }}>No open position</span>}
           </div>
         </div>
       </div>
+      <div className="flex items-center gap-6 px-4 py-3 border-t flex-wrap" style={{ borderColor: '#1a2538', background: '#070B10' }}>
+        <div className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Neural Signals</div>
+        <SignalBar count={longSignalCount} color="#3b82f6" label="LONG" />
+        <SignalBar count={shortSignalCount} color="#f97316" label="SHORT" />
+        {running && (
+          <div className="ml-auto flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#00FF66' }} />
+            <span className="text-[9px] font-mono" style={{ color: '#00FF66' }}>LIVE</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const rightContent = (
+    <div className="flex flex-col h-full min-w-0">
+      {tickerBar}
+      <VerticalSplit
+        className="flex-1 min-h-0"
+        defaultBottomHeight={180}
+        minBottom={100}
+        maxBottom={350}
+        top={
+          <div className="h-full">
+            <PriceChart
+              exchangeId={activeExchangeId}
+              symbol={selectedSymbol}
+              longLevels={longLevels}
+              shortLevels={shortLevels}
+              indicators={indicators}
+              overlay={
+                <NeuralLevelsOverlay
+                  exchangeId={activeExchangeId}
+                  symbol={selectedSymbol}
+                  onLevelsUpdate={handleLevelsUpdate}
+                />
+              }
+            />
+          </div>
+        }
+        bottom={positionPanel}
+      />
+    </div>
   );
 
   return (
