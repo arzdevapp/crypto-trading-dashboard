@@ -13,12 +13,21 @@ interface TickerItem {
   volume: number;
 }
 
-const TickerEntry = memo(function TickerEntry({ symbol, last, percentage }: TickerItem) {
+const TickerEntry = memo(function TickerEntry({ symbol, last, percentage, isActive, onClick }: TickerItem & { isActive: boolean; onClick: () => void }) {
   const isUp = percentage >= 0;
   const base = symbol.split('/')[0];
   return (
-    <div className="flex items-center gap-2 px-4 py-1.5 border-r border-[#243044] flex-shrink-0 hover:bg-[#121C2F] transition-colors cursor-default">
-      <span className="text-[#C7D1DB] font-mono text-xs font-medium">{base}</span>
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 px-4 py-1.5 border-r flex-shrink-0 transition-all"
+      style={{
+        borderColor: '#243044',
+        background: isActive ? '#0d1e35' : 'transparent',
+        borderBottom: isActive ? '2px solid #00E5FF' : '2px solid transparent',
+        cursor: 'pointer',
+      }}
+    >
+      <span className="font-mono text-xs font-bold" style={{ color: isActive ? '#00E5FF' : '#C7D1DB' }}>{base}</span>
       <span className="font-mono text-xs font-bold" style={{ color: isUp ? '#00FF66' : '#ef4444' }}>
         ${last.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: last >= 1 ? 2 : 6 })}
       </span>
@@ -28,12 +37,12 @@ const TickerEntry = memo(function TickerEntry({ symbol, last, percentage }: Tick
           {isUp ? '+' : ''}{percentage.toFixed(2)}%
         </span>
       </div>
-    </div>
+    </button>
   );
 });
 
 export function TickerBar() {
-  const { activeExchangeId } = useStore();
+  const { activeExchangeId, selectedSymbol, setSelectedSymbol } = useStore();
 
   const { data: tickers = [] } = useQuery<TickerItem[]>({
     queryKey: ['ticker-bar', activeExchangeId],
@@ -73,7 +82,12 @@ export function TickerBar() {
           <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
         </div>
         {tickers.map((t) => (
-          <TickerEntry key={t.symbol} {...t} />
+          <TickerEntry
+            key={t.symbol}
+            {...t}
+            isActive={t.symbol === selectedSymbol}
+            onClick={() => setSelectedSymbol(t.symbol)}
+          />
         ))}
       </div>
     </div>
