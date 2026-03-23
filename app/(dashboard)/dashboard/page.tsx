@@ -70,7 +70,7 @@ export default function DashboardPage() {
   // Desktop layout — resizable panels
   const leftSidebar = (
     <div className="flex flex-col gap-2 h-full overflow-y-auto p-2 pr-0">
-      <WalletPanel />
+      <WalletPanel compact />
       <AccountMetrics />
       <NeuralSignalMatrix />
       <StrategyStatusPanel />

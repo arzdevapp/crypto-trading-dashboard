@@ -18,7 +18,7 @@ export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) 
   const quoteAsset = selectedSymbol.split('/')[1] ?? 'USDT';
   const baseAsset  = selectedSymbol.split('/')[0];
 
-  const { data: balanceData, isLoading, refetch, isFetching } = useBalance(activeExchangeId);
+  const { data: balanceData, isLoading, isError, refetch, isFetching } = useBalance(activeExchangeId);
 
   const { data: ticker } = useQuery<{ last: number }>({
     queryKey: ['ticker', activeExchangeId, selectedSymbol],
@@ -83,16 +83,25 @@ export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) 
               <div key={i} className="h-4 rounded animate-pulse" style={{ background: '#121C2F' }} />
             ))}
           </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center gap-1.5 py-2">
+            <p className="text-[10px] font-mono text-center" style={{ color: '#ef4444' }}>Failed to load balance</p>
+            <button
+              onClick={() => refetch()}
+              className="text-[9px] font-mono px-2 py-0.5 rounded"
+              style={{ background: '#121C2F', color: '#00E5FF', border: '1px solid #1e2d45' }}
+            >
+              Retry
+            </button>
+          </div>
         ) : (
           <>
             {/* Quote asset (USDT) row */}
             <div className="space-y-1">
               <div className="flex justify-between text-[10px] font-mono">
                 <span style={{ color: '#6b7280' }}>Free {quoteAsset}</span>
-                <span style={{ color: freeQuote > 0 ? '#C7D1DB' : '#374151' }}>
-                  {freeQuote > 0
-                    ? `$${freeQuote.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                    : '—'}
+                <span style={{ color: freeQuote > 0 ? '#C7D1DB' : '#6b7280' }}>
+                  ${freeQuote.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
               {usedQuote > 0 && (
@@ -148,8 +157,8 @@ export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) 
               </div>
             )}
 
-            {/* Total portfolio est */}
-            {!compact && totalValueUsd > 0 && (
+            {/* Total portfolio est — show on full mode, or compact when base is held */}
+            {(!compact || totalBase > 0) && totalValueUsd > 0 && (
               <div className="flex justify-between text-[10px] font-mono pt-0.5 border-t" style={{ borderColor: '#1a2538' }}>
                 <span style={{ color: '#6b7280' }}>Est. total ({quoteAsset})</span>
                 <span style={{ color: '#9ca3af' }}>

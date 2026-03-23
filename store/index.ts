@@ -30,6 +30,8 @@ interface ChartState {
 interface UIState {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  sidebarWidth: number;
+  setSidebarWidth: (w: number) => void;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
 }
@@ -59,6 +61,8 @@ export const useStore = create<AppState>()(
       // UI
       sidebarOpen: true,
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      sidebarWidth: 224,
+      setSidebarWidth: (w) => set({ sidebarWidth: w }),
       mobileMenuOpen: false,
       setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
     }),
@@ -69,6 +73,8 @@ export const useStore = create<AppState>()(
         selectedSymbol: state.selectedSymbol,
         selectedTimeframe: state.selectedTimeframe,
         activeIndicators: state.activeIndicators,
+        sidebarOpen: state.sidebarOpen,
+        sidebarWidth: state.sidebarWidth,
       }),
     }
   )
