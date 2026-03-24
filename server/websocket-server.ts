@@ -55,7 +55,8 @@ function startCandleWatcher(key: string) {
   };
 
   poll(); // immediate first push
-  candleWatchers.set(key, setInterval(poll, 5000));
+  // Kraken rate-limits public endpoints aggressively; use 15s for all exchanges
+  candleWatchers.set(key, setInterval(poll, 15000));
 }
 
 function stopCandleWatcher(key: string) {
