@@ -1,15 +1,22 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import * as pty from 'node-pty';
 import os from 'os';
 
 const shell = process.env.SHELL ?? (os.platform() === 'win32' ? 'powershell.exe' : 'bash');
 
 export function createTerminalServer(port: number) {
+  let pty: typeof import('node-pty') | null = null;
+  try {
+    pty = require('node-pty');
+  } catch {
+    console.warn('Terminal server unavailable (node-pty not installed)');
+    return null;
+  }
+
+  const ptyCopy = pty;
   const wss = new WebSocketServer({ port });
 
   wss.on('connection', (ws) => {
-    // Spawn a PTY process
-    const ptyProcess = pty.spawn(shell, [], {
+    const ptyProcess = ptyCopy.spawn(shell, [], {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
@@ -17,7 +24,6 @@ export function createTerminalServer(port: number) {
       env: process.env as Record<string, string>,
     });
 
-    // PTY → WebSocket
     ptyProcess.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'output', data }));
@@ -31,7 +37,6 @@ export function createTerminalServer(port: number) {
       }
     });
 
-    // WebSocket → PTY
     ws.on('message', (raw) => {
       try {
         const msg = JSON.parse(raw.toString());
