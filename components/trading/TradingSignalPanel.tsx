@@ -127,6 +127,7 @@ export function TradingSignalPanel({ exchangeId, symbol }: Props) {
     retry: 1,
   });
 
+  // Reuse the chart's OHLCV query to avoid duplicate API calls (Kraken rate limits)
   const { data: candles } = useQuery<Candle[]>({
     queryKey: ['ohlcv-signal', exchangeId, symbol],
     queryFn: async () => {
@@ -134,8 +135,8 @@ export function TradingSignalPanel({ exchangeId, symbol }: Props) {
       if (!r.ok) throw new Error('OHLCV fetch failed');
       return r.json();
     },
-    refetchInterval: 60_000,
-    staleTime: 55_000,
+    refetchInterval: 120_000,
+    staleTime: 110_000,
     retry: 1,
   });
 
