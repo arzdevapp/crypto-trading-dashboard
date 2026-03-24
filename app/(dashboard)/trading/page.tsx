@@ -7,6 +7,7 @@ import { HorizontalSplit, VerticalSplit } from '@/components/ui/resizable';
 import { useStore } from '@/store';
 import { PageHelp } from '@/components/ui/page-help';
 import { WalletPanel } from '@/components/wallet/WalletPanel';
+import { TradingSignalPanel } from '@/components/trading/TradingSignalPanel';
 import { useQuery } from '@tanstack/react-query';
 
 export default function TradingPage() {
@@ -78,6 +79,9 @@ export default function TradingPage() {
 
       {/* Wallet summary */}
       <WalletPanel compact />
+
+      {/* Signal panel */}
+      <TradingSignalPanel exchangeId={activeExchangeId} symbol={selectedSymbol} />
 
       {/* Order form */}
       <OrderForm exchangeId={activeExchangeId} symbol={selectedSymbol} />
