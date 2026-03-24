@@ -959,7 +959,7 @@ function BotRow({ bot, isSelected, onView, onStop, onDelete }: {
         {ps?.inPosition ? (
           <>
             <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>
-              <span style={{ color: '#9ca3af' }}>{formatCrypto(ps.positionSize, 4)}</span>
+              <span style={{ color: '#9ca3af' }}>{formatCrypto(ps.positionSize, 6)}</span>
             </span>
             <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>
               DCA <span style={{ color: ps.dcaStage > 3 ? '#f97316' : '#9ca3af' }}>{ps.dcaStage}/7</span>

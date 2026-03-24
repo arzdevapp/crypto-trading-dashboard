@@ -19,7 +19,7 @@ export function formatPercent(value: number, decimals = 2): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`;
 }
 
-export function formatCrypto(value: number, decimals = 8): string {
+export function formatCrypto(value: number, decimals = 6): string {
   return new Decimal(value).toFixed(decimals);
 }
 
