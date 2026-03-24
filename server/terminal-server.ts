@@ -12,7 +12,7 @@ export function createTerminalServer(port: number) {
     return null;
   }
 
-  const ptyCopy = pty;
+  const ptyCopy = pty!;
   const wss = new WebSocketServer({ port });
 
   wss.on('connection', (ws) => {
