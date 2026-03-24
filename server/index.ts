@@ -27,22 +27,16 @@ async function resumeRunningStrategies() {
 
     console.log(`[boot] Resuming ${running.length} strategy(s) that were running before shutdown…`);
 
-    const results = await Promise.allSettled(
-      running.map(s => startStrategy(s.id))
-    );
-
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled') {
-        console.log(`[boot] ✓ Resumed: ${running[i].name} (${running[i].symbol})`);
-      } else {
-        console.error(`[boot] ✗ Failed to resume: ${running[i].name} — ${r.reason}`);
-        // Mark as error so the UI shows it needs attention
-        prisma.strategy.update({
-          where: { id: running[i].id },
-          data: { status: 'error' },
-        }).catch(() => {});
+    // Resume sequentially to avoid concurrent Prisma write timeouts on SQLite
+    for (const s of running) {
+      try {
+        await startStrategy(s.id);
+        console.log(`[boot] ✓ Resumed: ${s.name} (${s.symbol})`);
+      } catch (err) {
+        console.error(`[boot] ✗ Failed to resume: ${s.name} — ${err}`);
+        // Keep status as 'running' so next restart will retry (don't mark as error)
       }
-    });
+    }
   } catch (err) {
     console.error('[boot] Strategy recovery failed:', err);
   }
