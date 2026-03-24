@@ -36,7 +36,7 @@ export default function TradingPage() {
   }
 
   const sidebar = (
-    <div className="flex flex-col gap-2 h-full overflow-y-auto p-2 pr-0 xl:pr-0">
+    <div className="flex flex-col gap-2 p-2 pr-0">
       {/* Symbol selector */}
       <div className="rounded-lg border overflow-hidden flex-shrink-0" style={{ background: '#0E1626', borderColor: '#243044' }}>
         <div className="px-3 py-2 border-b flex items-center justify-between" style={{ borderColor: '#243044', background: '#070B10' }}>
@@ -80,9 +80,7 @@ export default function TradingPage() {
       <WalletPanel compact />
 
       {/* Order form */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <OrderForm exchangeId={activeExchangeId} symbol={selectedSymbol} />
-      </div>
+      <OrderForm exchangeId={activeExchangeId} symbol={selectedSymbol} />
     </div>
   );
 
