@@ -145,8 +145,14 @@ export function TradingSignalPanel({ exchangeId, symbol }: Props) {
   const macdData = closes.length > 35 ? calcMACD(closes) : null;
   const fg = sentimentData?.fearGreed;
 
-  const rec = rsi !== null && macdData !== null && mlData
-    ? calcRecommendation(rsi, macdData.histogram, mlData.longSignalCount, mlData.shortSignalCount, fg?.value ?? 50)
+  const mlLong = mlData?.longSignalCount ?? 0;
+  const mlShort = mlData?.shortSignalCount ?? 0;
+  const mlLongLevels = mlData?.longLevels ?? [];
+  const mlShortLevels = mlData?.shortLevels ?? [];
+  const mlPrice = mlData?.currentPrice ?? 0;
+
+  const rec = rsi !== null && macdData !== null
+    ? calcRecommendation(rsi, macdData.histogram, mlLong, mlShort, fg?.value ?? 50)
     : null;
 
   const rsiColor = rsi === null ? '#8B949E' : rsi < 30 ? '#00FF66' : rsi > 70 ? '#ef4444' : '#C7D1DB';
@@ -209,14 +215,14 @@ export function TradingSignalPanel({ exchangeId, symbol }: Props) {
           <div className="rounded p-2" style={{ background: '#070B10' }}>
             <div className="text-[9px] font-mono mb-1" style={{ color: '#8B949E' }}>ML Buy Zones</div>
             <div className="flex items-end gap-1">
-              <span className="text-[15px] font-mono font-bold" style={{ color: mlData?.longSignalCount ? '#00FF66' : '#4B5563' }}>
-                {mlData?.longSignalCount ?? '—'}
+              <span className="text-[15px] font-mono font-bold" style={{ color: mlLong ? '#00FF66' : '#4B5563' }}>
+                {mlLong || '—'}
               </span>
               <span className="text-[9px] font-mono mb-0.5" style={{ color: '#4B5563' }}>/7</span>
             </div>
             <div className="flex gap-0.5 mt-1">
               {Array.from({ length: 7 }).map((_, i) => (
-                <div key={i} className="flex-1 h-1 rounded-sm" style={{ background: i < (mlData?.longSignalCount ?? 0) ? '#00FF66' : '#1e2d45' }} />
+                <div key={i} className="flex-1 h-1 rounded-sm" style={{ background: i < (mlLong) ? '#00FF66' : '#1e2d45' }} />
               ))}
             </div>
           </div>
@@ -225,14 +231,14 @@ export function TradingSignalPanel({ exchangeId, symbol }: Props) {
           <div className="rounded p-2" style={{ background: '#070B10' }}>
             <div className="text-[9px] font-mono mb-1" style={{ color: '#8B949E' }}>ML Sell Zones</div>
             <div className="flex items-end gap-1">
-              <span className="text-[15px] font-mono font-bold" style={{ color: mlData?.shortSignalCount ? '#ef4444' : '#4B5563' }}>
-                {mlData?.shortSignalCount ?? '—'}
+              <span className="text-[15px] font-mono font-bold" style={{ color: mlShort ? '#ef4444' : '#4B5563' }}>
+                {mlShort || '—'}
               </span>
               <span className="text-[9px] font-mono mb-0.5" style={{ color: '#4B5563' }}>/7</span>
             </div>
             <div className="flex gap-0.5 mt-1">
               {Array.from({ length: 7 }).map((_, i) => (
-                <div key={i} className="flex-1 h-1 rounded-sm" style={{ background: i < (mlData?.shortSignalCount ?? 0) ? '#ef4444' : '#1e2d45' }} />
+                <div key={i} className="flex-1 h-1 rounded-sm" style={{ background: i < (mlShort) ? '#ef4444' : '#1e2d45' }} />
               ))}
             </div>
           </div>
@@ -253,30 +259,30 @@ export function TradingSignalPanel({ exchangeId, symbol }: Props) {
         )}
 
         {/* Nearest ML levels */}
-        {mlData && mlData.currentPrice > 0 && (mlData.longLevels.length > 0 || mlData.shortLevels.length > 0) && (
+        {mlPrice > 0 && (mlLongLevels.length > 0 || mlShortLevels.length > 0) && (
           <div className="rounded p-2" style={{ background: '#070B10' }}>
             <div className="text-[9px] font-mono mb-2" style={{ color: '#8B949E' }}>Nearest Levels</div>
             <div className="flex flex-col gap-1">
-              {mlData.shortLevels.filter(l => l > mlData.currentPrice).slice(0, 2).map((l, i) => (
+              {mlShortLevels.filter(l => l > mlPrice).slice(0, 2).map((l, i) => (
                 <div key={i} className="flex justify-between items-center">
                   <span className="text-[9px] font-mono" style={{ color: '#ef4444' }}>↑ Sell</span>
                   <span className="text-[10px] font-mono" style={{ color: '#C7D1DB' }}>
                     ${l.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                   </span>
                   <span className="text-[9px] font-mono" style={{ color: '#4B5563' }}>
-                    +{((l / mlData.currentPrice - 1) * 100).toFixed(1)}%
+                    +{((l / mlPrice - 1) * 100).toFixed(1)}%
                   </span>
                 </div>
               ))}
               <div className="border-t my-0.5" style={{ borderColor: '#243044' }} />
-              {mlData.longLevels.filter(l => l < mlData.currentPrice).slice(-2).reverse().map((l, i) => (
+              {mlLongLevels.filter(l => l < mlPrice).slice(-2).reverse().map((l, i) => (
                 <div key={i} className="flex justify-between items-center">
                   <span className="text-[9px] font-mono" style={{ color: '#00FF66' }}>↓ Buy</span>
                   <span className="text-[10px] font-mono" style={{ color: '#C7D1DB' }}>
                     ${l.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                   </span>
                   <span className="text-[9px] font-mono" style={{ color: '#4B5563' }}>
-                    -{((1 - l / mlData.currentPrice) * 100).toFixed(1)}%
+                    -{((1 - l / mlPrice) * 100).toFixed(1)}%
                   </span>
                 </div>
               ))}
