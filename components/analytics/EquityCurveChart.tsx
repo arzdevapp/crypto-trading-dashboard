@@ -1,5 +1,6 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useStore } from '@/store';
@@ -25,18 +26,21 @@ export function EquityCurveChart() {
     openedAt: string;
     pnl: number | null;
   }
-  let running = 0;
-  const equityData = [...trades]
-    .reverse()
-    .filter((t: Trade) => t.pnl !== null)
-    .map((t: Trade) => {
-      running += t.pnl ?? 0;
-      return {
-        date: format(new Date(t.openedAt), 'MM/dd'),
-        equity: running,
-        timestamp: t.openedAt,
-      };
-    });
+  const equityData = useMemo(() => {
+    let running = 0;
+    return [...trades]
+      .reverse()
+      .filter((t: Trade) => t.pnl !== null)
+      .map((t: Trade) => {
+        // eslint-disable-next-line react-hooks/immutability
+        running += t.pnl ?? 0;
+        return {
+          date: format(new Date(t.openedAt), 'MM/dd'),
+          equity: running,
+          timestamp: t.openedAt,
+        };
+      });
+  }, [trades]);
 
   return (
     <Card className="h-full flex flex-col overflow-hidden">

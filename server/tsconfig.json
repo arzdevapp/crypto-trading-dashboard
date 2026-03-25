@@ -2,6 +2,7 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "module": "CommonJS",
+    "moduleResolution": "node",
     "outDir": "../dist/server"
   },
   "include": ["**/*.ts", "../lib/**/*.ts", "../types/**/*.ts"]

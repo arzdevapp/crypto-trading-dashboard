@@ -9,7 +9,7 @@ export class RSIStrategy extends BaseStrategy {
 
   constructor(config: Record<string, unknown>) {
     super(config as never);
-    // @ts-ignore
+    // @ts-expect-error generic config assignment
     this.config = config;
     this.warmupPeriod = (config.period as number ?? 14) + 10;
   }

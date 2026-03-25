@@ -40,6 +40,20 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <ChevronUp className="w-3 h-3" style={{ color: '#00E5FF' }} />;
 }
 
+function ColHeader({ col, label, className = '', sortKey, sortDir, toggleSort }: { col: SortKey; label: string; className?: string; sortKey: SortKey; sortDir: SortDir; toggleSort: (col: SortKey) => void }) {
+  const active = sortKey === col;
+  return (
+    <button
+      className={`flex items-center gap-1 font-mono text-[9px] uppercase tracking-widest transition-colors hover:opacity-100 ${className}`}
+      style={{ color: active ? '#00E5FF' : '#243044' }}
+      onClick={() => toggleSort(col)}
+    >
+      {label}
+      <SortIcon col={col} sortKey={sortKey} sortDir={sortDir} />
+    </button>
+  );
+}
+
 export default function TrendingPage() {
   const { setSelectedSymbol } = useStore();
   const queryClient = useQueryClient();
@@ -80,20 +94,6 @@ export default function TrendingPage() {
       return sortDir === 'desc' ? vb - va : va - vb;
     });
   }, [coins, sortKey, sortDir]);
-
-  function ColHeader({ col, label, className = '' }: { col: SortKey; label: string; className?: string }) {
-    const active = sortKey === col;
-    return (
-      <button
-        className={`flex items-center gap-1 font-mono text-[9px] uppercase tracking-widest transition-colors hover:opacity-100 ${className}`}
-        style={{ color: active ? '#00E5FF' : '#243044' }}
-        onClick={() => toggleSort(col)}
-      >
-        {label}
-        <SortIcon col={col} sortKey={sortKey} sortDir={sortDir} />
-      </button>
-    );
-  }
 
   return (
     <div className="h-full flex flex-col p-2 gap-2" style={{ background: '#070B10' }}>
@@ -143,9 +143,9 @@ export default function TrendingPage() {
           style={{ borderColor: '#243044', gridTemplateColumns: '1fr auto auto auto' }}
         >
           <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: '#243044' }}>Coin</span>
-          <ColHeader col="price"     label="Price" />
-          <ColHeader col="change24h" label="24h" />
-          <ColHeader col="signal"   label="Signal" />
+          <ColHeader col="price"     label="Price" sortKey={sortKey} sortDir={sortDir} toggleSort={toggleSort} />
+          <ColHeader col="change24h" label="24h" sortKey={sortKey} sortDir={sortDir} toggleSort={toggleSort} />
+          <ColHeader col="signal"   label="Signal" sortKey={sortKey} sortDir={sortDir} toggleSort={toggleSort} />
         </div>
 
         {/* Rows */}

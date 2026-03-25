@@ -10,7 +10,7 @@ export class SentimentStrategy extends BaseStrategy {
 
   constructor(config: Record<string, unknown>) {
     super(config as never);
-    // @ts-ignore
+    // @ts-expect-error generic config assignment
     this.config = config;
     const rsiPeriod = (config.rsiPeriod as number) ?? 14;
     this.warmupPeriod = rsiPeriod + 10;

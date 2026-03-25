@@ -6,6 +6,7 @@ const shell = process.env.SHELL ?? (os.platform() === 'win32' ? 'powershell.exe'
 export function createTerminalServer(port: number) {
   let pty: typeof import('node-pty') | null = null;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     pty = require('node-pty');
   } catch {
     console.warn('Terminal server unavailable (node-pty not installed)');

@@ -11,7 +11,9 @@ function ResizeHandle({ direction, onResize }: ResizeHandleProps) {
   const lastPos = useRef(0);
   const handleRef = useRef<HTMLDivElement>(null);
   const onResizeRef = useRef(onResize);
-  onResizeRef.current = onResize;
+  useEffect(() => {
+    onResizeRef.current = onResize;
+  }, [onResize]);
 
   useEffect(() => {
     const el = handleRef.current;

@@ -62,7 +62,7 @@ export class PowerTraderStrategy extends BaseStrategy {
     const pmStartPct = cfg.pmStartPct as number ?? 5.0;
     const pmStartPctDCA = cfg.pmStartPctDCA as number ?? 2.5;
     const trailingGapPct = cfg.trailingGapPct as number ?? 1.5;
-    const quantity = cfg.quantity as number ?? 0.001;
+    const legacyQuantity = cfg.quantity as number ?? 0.001;
 
     // Neural signal levels injected by StrategyRunner before each candle
     const neuralLongLevel = cfg._neuralLongLevel as number ?? 0;
@@ -81,6 +81,12 @@ export class PowerTraderStrategy extends BaseStrategy {
     const effectiveStartLevel = Math.max(1, tradeStartLevel + newsAdjustment);
 
     const currentPrice = candles[candles.length - 1].close;
+    
+    let baseQuantity = legacyQuantity;
+    if (cfg.investmentPerTrade) {
+      baseQuantity = (cfg.investmentPerTrade as number) / currentPrice;
+    }
+
     const dcaLevels: DCALevel[] = (cfg.dcaLevels as DCALevel[]) ?? DEFAULT_DCA_LEVELS;
 
     // === SELL LOGIC: Trailing Profit Margin ===
@@ -128,7 +134,7 @@ export class PowerTraderStrategy extends BaseStrategy {
       if (neuralLongLevel >= effectiveStartLevel && neuralShortLevel === 0) {
         this.state.inPosition = true;
         this.state.avgCostBasis = currentPrice;
-        this.state.positionSize = quantity;
+        this.state.positionSize = baseQuantity;
         this.state.dcaStage = 0;
         this.state.dcaCount = 0;
         this.state.pmActive = false;
@@ -136,7 +142,7 @@ export class PowerTraderStrategy extends BaseStrategy {
         this.state.lastBuyTime = Date.now();
         return {
           action: 'buy',
-          quantity,
+          quantity: baseQuantity,
           price: currentPrice,
           reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}`,
         };
@@ -158,7 +164,12 @@ export class PowerTraderStrategy extends BaseStrategy {
       const hardTriggered = !hardTriggerCooldown && gainLossPct <= level.hardPctTrigger;
 
       if (neuralTriggered || hardTriggered) {
-        const dcaQty = quantity * level.multiplier;
+        let dcaQty = baseQuantity * level.multiplier;
+        if (cfg.investmentPerTrade) {
+          const dcaInvestment = (cfg.investmentPerTrade as number) * level.multiplier;
+          dcaQty = dcaInvestment / currentPrice;
+        }
+        
         const reason = neuralTriggered
           ? `DCA stage ${this.state.dcaStage + 1}: neural level ${neuralLongLevel}`
           : `DCA stage ${this.state.dcaStage + 1}: ${gainLossPct.toFixed(1)}% drawdown`;

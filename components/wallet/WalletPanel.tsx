@@ -17,7 +17,7 @@ const PCT_STEPS = [25, 50, 75, 100] as const;
 export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) {
   const { activeExchangeId, selectedSymbol } = useStore();
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => { Promise.resolve().then(() => setMounted(true)); }, []);
   const quoteAsset = selectedSymbol.split('/')[1] ?? 'USDT';
   const baseAsset  = selectedSymbol.split('/')[0];
 

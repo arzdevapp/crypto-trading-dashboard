@@ -36,7 +36,7 @@ export class DayTraderStrategy extends BaseStrategy {
 
   constructor(config: Record<string, unknown>) {
     super(config as never);
-    // @ts-ignore
+    // @ts-expect-error generic config assignment
     this.config = config;
     this.warmupPeriod = 10;
   }

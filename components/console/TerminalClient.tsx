@@ -19,7 +19,7 @@ export default function TerminalClient() {
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
   const connect = useCallback(() => {
-    setStatus('connecting');
+    setTimeout(() => setStatus('connecting'), 0);
 
     const term = new Terminal({
       theme: {

@@ -117,15 +117,13 @@ export default function DCABotPage() {
   }, []);
 
   // Reset form state when symbol changes
-  const prevSymbol = useRef(selectedSymbol);
-  useEffect(() => {
-    if (prevSymbol.current !== selectedSymbol) {
-      prevSymbol.current = selectedSymbol;
-      setLongLevels([]);
-      setShortLevels([]);
-      setUsdtInput('');
-    }
-  }, [selectedSymbol]);
+  const [prevSymbol, setPrevSymbol] = useState(selectedSymbol);
+  if (prevSymbol !== selectedSymbol) {
+    setPrevSymbol(selectedSymbol);
+    setLongLevels([]);
+    setShortLevels([]);
+    setUsdtInput('');
+  }
 
   // Poll current bot status
   const { data: botStatus, error: botError } = useQuery<BotStatus>({
@@ -213,6 +211,7 @@ export default function DCABotPage() {
           symbol: selectedSymbol,
           timeframe,
           config: {
+            investmentPerTrade: usdtInput ? Number(usdtInput) / 7 : undefined,
             tradeStartLevel: Number(tradeStartLevel),
             quantity: Number(quantity),
             pmStartPct: Number(pmStartPct),

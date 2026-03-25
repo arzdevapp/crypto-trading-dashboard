@@ -34,7 +34,9 @@ export function NeuralLevelsOverlay({ exchangeId, symbol, onLevelsUpdate }: Neur
 
   // Use a ref so the callback identity never becomes a dependency trigger
   const onLevelsUpdateRef = useRef(onLevelsUpdate);
-  onLevelsUpdateRef.current = onLevelsUpdate;
+  useEffect(() => {
+    onLevelsUpdateRef.current = onLevelsUpdate;
+  }, [onLevelsUpdate]);
 
   useEffect(() => {
     if (data && onLevelsUpdateRef.current) {
