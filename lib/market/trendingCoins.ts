@@ -83,7 +83,7 @@ function computeSafety(coin: {
 }
 
 function computeSignal(coin: TrendingCoin): { signal: TrendingCoin['signal']; reason: string } {
-  const abs24h = Math.abs(coin.change24h);
+
 
   // Risky low-cap high-volatility
   if (coin.safety.score < 30) {

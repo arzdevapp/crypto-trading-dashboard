@@ -8,7 +8,7 @@ let ws: WebSocket | null = null;
 const handlers = new Set<MessageHandler>();
 const connectionHandlers = new Set<(connected: boolean) => void>();
 const pendingMessages: WsMessage[] = [];
-let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
 let reconnectDelay = 1000;
 let isConnected = false;
 
@@ -55,7 +55,7 @@ function connect() {
     ws = null;
     isConnected = false;
     connectionHandlers.forEach((h) => h(false));
-    reconnectTimeout = setTimeout(() => {
+    setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, 30000);
       connect();
     }, reconnectDelay);

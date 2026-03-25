@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { startStrategy, stopStrategy, getRunnerStatus, getStrategyInstance } from '@/lib/strategies/StrategyRunner';
 import { getExchangeAdapter } from '@/lib/exchange/ExchangeFactory';
-import type { PowerTraderStrategy, PowerTraderState } from '@/lib/strategies/implementations/PowerTraderStrategy';
+import type { PowerTraderState } from '@/lib/strategies/implementations/PowerTraderStrategy';
 
 // GET — current bot status for a given exchange+symbol, or list all bots
 export async function GET(req: NextRequest) {

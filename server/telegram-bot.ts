@@ -1,6 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { prisma } from '../lib/db';
-import { startStrategy, stopStrategy, getAllRunnerIds, getRunnerStatus } from '../lib/strategies/StrategyRunner';
+import { startStrategy, stopStrategy } from '../lib/strategies/StrategyRunner';
 
 let bot: TelegramBot | null = null;
 let chatId: string | null = null;

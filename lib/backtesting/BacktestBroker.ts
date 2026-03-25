@@ -72,7 +72,8 @@ export class BacktestBroker {
     if (this.position) this.closePosition(lastPrice, Date.now());
   }
 
-  getEquity(currentPrice: number): number {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getEquity(_currentPrice: number): number {
     if (this.position) return this.capital + this.position.entryPrice * this.position.quantity;
     return this.capital;
   }

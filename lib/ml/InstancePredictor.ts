@@ -102,7 +102,8 @@ export class InstancePredictor {
     let maxLongSignal = 0;
     let maxShortSignal = 0;
 
-    for (const [tf, { memory }] of this.memories) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for (const [tf, { memory: _memory }] of this.memories) {
       if (!candles.length) continue;
       const latest = candles[candles.length - 1];
       const result = this.predict(tf, latest, currentPrice);

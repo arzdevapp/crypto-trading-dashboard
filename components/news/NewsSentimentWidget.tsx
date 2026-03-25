@@ -20,7 +20,7 @@ function scoreColor(score: number): string {
 }
 
 function ScoreBar({ value }: { value: number }) {
-  const pct = ((value + 1) / 2) * 100;
+
   return (
     <div className="relative h-1.5 rounded-full w-full overflow-hidden" style={{ background: '#1a2538' }}>
       <div className="absolute top-0 h-full rounded-full transition-all duration-500"

@@ -33,27 +33,7 @@ function calcEMA(values: number[], period: number): number[] {
   return result;
 }
 
-function calcRSI(values: number[], period = 14): number[] {
-  if (values.length < period + 1) return [];
-  const result: number[] = [];
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const diff = values[i] - values[i - 1];
-    if (diff > 0) gains += diff; else losses -= diff;
-  }
-  let avgGain = gains / period;
-  let avgLoss = losses / period;
-  const rsiVal = (ag: number, al: number) =>
-    al === 0 ? 100 : ag === 0 ? 0 : 100 - 100 / (1 + ag / al);
-  result.push(rsiVal(avgGain, avgLoss));
-  for (let i = period + 1; i < values.length; i++) {
-    const diff = values[i] - values[i - 1];
-    avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period;
-    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
-    result.push(rsiVal(avgGain, avgLoss));
-  }
-  return result;
-}
+
 
 function calcBollinger(values: number[], period = 20, mult = 2) {
   const middle = calcSMA(values, period);
@@ -73,21 +53,7 @@ function calcBollinger(values: number[], period = 20, mult = 2) {
   return { upper, middle, lower };
 }
 
-function calcMACD(values: number[], fastP = 12, slowP = 26, sigP = 9) {
-  const fastEMA = calcEMA(values, fastP);
-  const slowEMA = calcEMA(values, slowP);
-  if (fastEMA.length === 0 || slowEMA.length === 0) return { macd: [], signal: [], histogram: [] };
-  const offset = slowP - fastP;
-  const macdLine = slowEMA.map((v, i) => {
-    const fi = i + offset;
-    return fi < fastEMA.length ? fastEMA[fi] - v : 0;
-  });
-  const signalLine = calcEMA(macdLine, sigP);
-  if (signalLine.length === 0) return { macd: macdLine, signal: [], histogram: [] };
-  const sigOffset = macdLine.length - signalLine.length;
-  const histogram = signalLine.map((v, i) => macdLine[i + sigOffset] - v);
-  return { macd: macdLine, signal: signalLine, histogram };
-}
+
 
 // ── Indicator config ──
 

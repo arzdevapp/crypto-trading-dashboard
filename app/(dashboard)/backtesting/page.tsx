@@ -68,8 +68,8 @@ export default function BacktestingPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Backtest failed');
       setResults(data.metrics);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setRunning(false);
     }

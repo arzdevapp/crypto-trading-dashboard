@@ -8,6 +8,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ exchang
     const { exchangeId } = await params;
     const exchange = await prisma.exchangeConfig.findUnique({ where: { id: exchangeId } });
     if (!exchange) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { apiKey, apiSecret, ...safe } = exchange;
     return NextResponse.json(safe);
   } catch (err) {

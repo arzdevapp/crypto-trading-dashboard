@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '@/store';
-import { TrendingUp, Flame, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, Zap } from 'lucide-react';
+import { TrendingUp, Flame, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { PageHelp } from '@/components/ui/page-help';
@@ -160,7 +160,7 @@ export default function TrendingPage() {
             const sig = SIGNAL_CONFIG[coin.signal];
             const safeColor = SAFETY_COLOR[coin.safety.label];
             const changeColor24 = coin.change24h >= 0 ? '#00FF66' : '#ef4444';
-            const changeColor7d = coin.change7d >= 0 ? '#00FF66' : '#ef4444';
+
 
             return (
               <div

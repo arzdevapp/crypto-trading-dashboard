@@ -123,7 +123,7 @@ function handleMessage(client: Client, msg: WsMessage) {
     }
   } else if (msg.type === 'unsubscribe') {
     if (msg.channel === 'candle' && msg.timeframe) {
-      const key = `${msg.symbol}:${msg.timeframe}`; // partial key for unsubscribe
+      // partial key for unsubscribe
       // Find matching full keys
       for (const [fullKey, subs] of candleSubscribers.entries()) {
         if (fullKey.endsWith(`:${msg.symbol}:${msg.timeframe}`)) {

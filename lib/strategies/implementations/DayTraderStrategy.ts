@@ -60,7 +60,7 @@ export class DayTraderStrategy extends BaseStrategy {
     const newsSentimentLabel = cfg._newsSentimentLabel as string ?? 'Neutral';
 
     const currentPrice = candles[candles.length - 1].close;
-    const now = Date.now();
+
 
     // Reset session counter at midnight UTC
     const dayStart = new Date();

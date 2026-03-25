@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PriceChart } from '@/components/charts/PriceChart';
 import { NeuralLevelsOverlay } from '@/components/charts/NeuralLevelsOverlay';
@@ -13,7 +13,7 @@ import { Brain, RefreshCw, Zap, Square, Activity, Eye, Trash2, TrendingUp, Trend
 import { NewsSentimentWidget } from '@/components/news/NewsSentimentWidget';
 import { HorizontalSplit, VerticalSplit } from '@/components/ui/resizable';
 import { PageHelp } from '@/components/ui/page-help';
-import { formatCurrency, formatCrypto, formatPercent } from '@/lib/utils';
+import { formatCurrency, formatCrypto } from '@/lib/utils';
 import { WalletPanel } from '@/components/wallet/WalletPanel';
 
 interface BotStatus {

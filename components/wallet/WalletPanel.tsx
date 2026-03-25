@@ -1,7 +1,7 @@
 'use client';
 import { useBalance } from '@/hooks/usePortfolio';
 import { useStore } from '@/store';
-import { useQuery } from '@tanstack/react-query';
+
 import { Wallet, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -23,16 +23,11 @@ export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) 
 
   const { data: balanceData, isLoading, isError, refetch, isFetching } = useBalance(activeExchangeId);
 
-  const { data: ticker } = useQuery<{ last: number }>({
-    queryKey: ['ticker', activeExchangeId, selectedSymbol],
-    queryFn: () => fetch(`/api/exchanges/${activeExchangeId}/ticker/${encodeURIComponent(selectedSymbol)}`).then(r => r.json()),
-    enabled: !!activeExchangeId,
-    refetchInterval: 10000,
-    staleTime: 9000,
-  });
+
 
   // Get all assets with non-zero balance
   const heldAssets = Object.entries(balanceData || {})
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     .filter(([_, balance]) => (balance?.free ?? 0) > 0)
     .sort(([a], [b]) => {
       // Prioritize quote asset, then base asset, then alphabetical
@@ -43,21 +38,9 @@ export function WalletPanel({ onSelectPct, compact = false }: WalletPanelProps) 
       return a.localeCompare(b);
     });
 
-  const livePrice  = ticker?.last ?? 0;
+
   const freeQuote  = balanceData?.[quoteAsset]?.free  ?? 0;
-  const usedQuote  = balanceData?.[quoteAsset]?.used  ?? 0;
-  const totalQuote = balanceData?.[quoteAsset]?.total ?? 0;
   const freeBase   = balanceData?.[baseAsset]?.free   ?? 0;
-  const usedBase   = balanceData?.[baseAsset]?.used   ?? 0;
-  const totalBase  = balanceData?.[baseAsset]?.total  ?? 0;
-
-  const usedPctQuote  = totalQuote > 0 ? (usedQuote  / totalQuote)  * 100 : 0;
-  const heldPctBase   = totalBase  > 0 ? (freeBase   / totalBase)   * 100 : 0;
-
-  const baseValueUsd  = livePrice > 0 ? freeBase  * livePrice : 0;
-  const totalValueUsd = freeQuote + baseValueUsd +
-    (usedQuote) +
-    (livePrice > 0 ? usedBase * livePrice : 0);
 
   const handlePct = (pct: number) => {
     if (!onSelectPct) return;

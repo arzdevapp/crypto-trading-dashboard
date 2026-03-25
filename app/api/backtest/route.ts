@@ -4,7 +4,7 @@ import { loadHistoricalData } from '@/lib/backtesting/HistoricalDataLoader';
 import { runBacktest } from '@/lib/backtesting/BacktestEngine';
 import { createStrategy } from '@/lib/strategies/StrategyRegistry';
 import { getPredictor } from '@/lib/ml/InstancePredictor';
-import { getNewsSentiment } from '@/lib/news/NewsSentimentScorer';
+
 
 export async function POST(req: Request) {
   try {
@@ -38,6 +38,7 @@ export async function POST(req: Request) {
     // No initialize() needed for backtest — the engine feeds candles sequentially
     // which naturally warms up the strategy.
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let predictor: any = null;
     if (strategyType === 'POWER_TRADER') {
       try {
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
       initialCapital: initialCapital || 1000,
       commissionRate: 0.001, // 0.1% typical spot fee
       slippagePct: 0.05,     // 0.05% typical slippage
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onBeforeCandle: async (strat: any, candle: any) => {
         if (strategyType === 'POWER_TRADER' && typeof strat.setNeuralLevels === 'function') {
           let longLvl = 0;
