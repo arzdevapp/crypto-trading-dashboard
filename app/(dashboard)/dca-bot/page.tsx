@@ -31,6 +31,10 @@ interface BotStatus {
     trailingPMLine: number;
     pmActive: boolean;
     lastSignalLevel: number;
+    side: 'long' | 'short';
+    circuitBreakerHits: number;
+    dailyLossTotal: number;
+    dailyLossDate: string;
   } | null;
 }
 
@@ -109,6 +113,10 @@ export default function DCABotPage() {
   const [quantity, setQuantity] = useState('0.001');
   const [usdtInput, setUsdtInput] = useState('');
   const [pmStartPct, setPmStartPct] = useState('5');
+  const [maxDrawdownPct, setMaxDrawdownPct] = useState('25');
+  const [dailyLossLimit, setDailyLossLimit] = useState('0');
+  const [side, setSide] = useState<'long' | 'short'>('long');
+  const isShort = side === 'short';
   const queryClient = useQueryClient();
 
   const handleLevelsUpdate = useCallback((long: number[], short: number[]) => {
@@ -211,11 +219,16 @@ export default function DCABotPage() {
           symbol: selectedSymbol,
           timeframe,
           config: {
-            investmentPerTrade: usdtInput ? Number(usdtInput) / 7 : undefined,
+            side,
+            investmentPerTrade: isShort
+              ? (usdtInput ? Number(usdtInput) / 7 : undefined)
+              : (usdtInput ? Number(usdtInput) / 7 : undefined),
             tradeStartLevel: Number(tradeStartLevel),
             quantity: Number(quantity),
             pmStartPct: Number(pmStartPct),
             pmStartPctDCA: Number(pmStartPct) / 2,
+            maxDrawdownPct: Number(maxDrawdownPct),
+            dailyLossLimit: Number(dailyLossLimit),
           },
         }),
       });
@@ -275,10 +288,18 @@ export default function DCABotPage() {
   const ps = botStatus?.powerState;
   const running = botStatus?.running ?? false;
   const currentPrice = botStatus?.currentPrice ?? 0;
+  const activeSide = ps?.side ?? side;
+  const activeIsShort = activeSide === 'short';
   const pnl = ps?.inPosition && (ps?.avgCostBasis ?? 0) > 0
-    ? (currentPrice - ps.avgCostBasis) * ps.positionSize : 0;
+    ? (activeIsShort
+        ? (ps.avgCostBasis - currentPrice) * ps.positionSize   // short profits when price drops
+        : (currentPrice - ps.avgCostBasis) * ps.positionSize)
+    : 0;
   const pnlPct = (ps?.avgCostBasis ?? 0) > 0
-    ? ((currentPrice - (ps?.avgCostBasis ?? 0)) / (ps?.avgCostBasis ?? 1)) * 100 : 0;
+    ? (activeIsShort
+        ? ((ps!.avgCostBasis - currentPrice) / ps!.avgCostBasis) * 100
+        : ((currentPrice - (ps?.avgCostBasis ?? 0)) / (ps?.avgCostBasis ?? 1)) * 100)
+    : 0;
   const positionValue = ps?.inPosition ? (ps.positionSize * currentPrice) : 0;
   const costBasisValue = ps?.inPosition ? (ps.positionSize * ps.avgCostBasis) : 0;
 
@@ -335,6 +356,32 @@ export default function DCABotPage() {
         <div className="px-3 py-3 border-b flex-shrink-0 space-y-3" style={{ borderColor: '#1a2538' }}>
           <div className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#6b7280' }}>Bot Configuration</div>
 
+          {/* Side toggle */}
+          <div className="grid grid-cols-2 gap-1">
+            {(['long', 'short'] as const).map(s => {
+              const active = side === s;
+              const color = s === 'long' ? '#00FF66' : '#ef4444';
+              const label = s === 'long' ? 'LONG' : 'SELL';
+              return (
+                <button
+                  key={s}
+                  onClick={() => !running && setSide(s)}
+                  disabled={running}
+                  className="py-1.5 rounded text-[10px] font-mono font-bold transition-all"
+                  style={{
+                    background: active ? `${color}15` : '#0d1220',
+                    border: `1px solid ${active ? `${color}60` : '#1e2d45'}`,
+                    color: active ? color : '#4b5563',
+                    cursor: running ? 'not-allowed' : 'pointer',
+                    opacity: running ? 0.5 : 1,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
           <div>
             <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Candle Interval</Label>
             <select
@@ -371,21 +418,27 @@ export default function DCABotPage() {
             {/* Available balance */}
             <div className="rounded px-2 py-1.5 space-y-0.5" style={{ background: '#060d18', border: '1px solid #1a2538' }}>
               <div className="flex justify-between text-[9px] font-mono">
-                <span style={{ color: '#6b7280' }}>Available {quoteAsset}</span>
-                <span style={{ color: freeQuote > 0 ? '#9ca3af' : '#374151' }}>
-                  {freeQuote > 0 ? `$${freeQuote.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                <span style={{ color: '#6b7280' }}>Available {isShort ? baseAsset : quoteAsset}</span>
+                <span style={{ color: (isShort ? freeBase : freeQuote) > 0 ? '#9ca3af' : '#374151' }}>
+                  {isShort
+                    ? (freeBase > 0 ? `${freeBase.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} ${baseAsset}` : '—')
+                    : (freeQuote > 0 ? `$${freeQuote.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—')}
                 </span>
               </div>
-              {freeBase > 0 && (
+              {(isShort ? freeQuote > 0 : freeBase > 0) && (
                 <div className="flex justify-between text-[9px] font-mono">
-                  <span style={{ color: '#6b7280' }}>Available {baseAsset}</span>
-                  <span style={{ color: '#9ca3af' }}>{freeBase.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} {baseAsset}</span>
+                  <span style={{ color: '#6b7280' }}>Available {isShort ? quoteAsset : baseAsset}</span>
+                  <span style={{ color: '#9ca3af' }}>
+                    {isShort
+                      ? `$${freeQuote.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `${freeBase.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} ${baseAsset}`}
+                  </span>
                 </div>
               )}
             </div>
 
             {/* % quick-select buttons */}
-            {freeQuote > 0 && currentPrice > 0 && !running && (
+            {((isShort ? freeBase > 0 : freeQuote > 0) && currentPrice > 0 && !running) && (
               <div className="grid grid-cols-4 gap-1">
                 {[25, 50, 75, 100].map(pct => (
                   <button
@@ -395,10 +448,18 @@ export default function DCABotPage() {
                     onMouseEnter={e => { (e.target as HTMLElement).style.color = '#00E5FF'; (e.target as HTMLElement).style.borderColor = '#00E5FF40'; }}
                     onMouseLeave={e => { (e.target as HTMLElement).style.color = '#6b7280'; (e.target as HTMLElement).style.borderColor = '#1e2d45'; }}
                     onClick={() => {
-                      const allocated = (freeQuote * pct) / 100;
-                      const perTradeQty = allocated / 7 / currentPrice;
-                      setQuantity(perTradeQty.toFixed(6));
-                      setUsdtInput((allocated).toFixed(2));
+                      if (isShort) {
+                        // Sell mode: budget is in base asset
+                        const allocated = (freeBase * pct) / 100;
+                        const perTradeQty = allocated / 7;
+                        setQuantity(perTradeQty.toFixed(6));
+                        setUsdtInput(allocated.toFixed(6));
+                      } else {
+                        const allocated = (freeQuote * pct) / 100;
+                        const perTradeQty = allocated / 7 / currentPrice;
+                        setQuantity(perTradeQty.toFixed(6));
+                        setUsdtInput(allocated.toFixed(2));
+                      }
                     }}
                   >
                     {pct}%
@@ -407,22 +468,29 @@ export default function DCABotPage() {
               </div>
             )}
 
-            {/* Dual input: USDT ↔ Coin qty */}
+            {/* Dual input: budget ↔ qty */}
             <div className="grid grid-cols-2 gap-1.5">
               <div>
-                <div className="text-[9px] font-mono mb-1" style={{ color: '#6b7280' }}>Total budget ({quoteAsset})</div>
+                <div className="text-[9px] font-mono mb-1" style={{ color: '#6b7280' }}>
+                  Total budget ({isShort ? baseAsset : quoteAsset})
+                </div>
                 <div className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono" style={{ color: '#6b7280' }}>$</span>
+                  {!isShort && <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono" style={{ color: '#6b7280' }}>$</span>}
                   <Input
-                    className="h-7 text-xs font-mono pl-5"
-                    type="number" step="10" min="0"
-                    placeholder="0.00"
+                    className={`h-7 text-xs font-mono ${isShort ? '' : 'pl-5'}`}
+                    type="number" step={isShort ? '0.001' : '10'} min="0"
+                    placeholder={isShort ? '0.000000' : '0.00'}
                     value={usdtInput}
                     onChange={e => {
                       setUsdtInput(e.target.value);
-                      const usdt = parseFloat(e.target.value);
-                      if (usdt > 0 && currentPrice > 0) {
-                        setQuantity(((usdt / 7) / currentPrice).toFixed(6));
+                      const val = parseFloat(e.target.value);
+                      if (val > 0 && currentPrice > 0) {
+                        if (isShort) {
+                          // Sell mode: budget is base qty, per-trade = budget / 7
+                          setQuantity((val / 7).toFixed(6));
+                        } else {
+                          setQuantity(((val / 7) / currentPrice).toFixed(6));
+                        }
                       }
                     }}
                     disabled={running}
@@ -430,7 +498,9 @@ export default function DCABotPage() {
                 </div>
               </div>
               <div>
-                <div className="text-[9px] font-mono mb-1" style={{ color: '#6b7280' }}>Qty per trade ({baseAsset})</div>
+                <div className="text-[9px] font-mono mb-1" style={{ color: '#6b7280' }}>
+                  {isShort ? `Qty per sell (${baseAsset})` : `Qty per trade (${baseAsset})`}
+                </div>
                 <Input
                   className="h-7 text-xs font-mono"
                   type="number" step="0.000001" min="0"
@@ -440,7 +510,11 @@ export default function DCABotPage() {
                     setQuantity(e.target.value);
                     const qty = parseFloat(e.target.value);
                     if (qty > 0 && currentPrice > 0) {
-                      setUsdtInput((qty * 7 * currentPrice).toFixed(2));
+                      if (isShort) {
+                        setUsdtInput((qty * 7).toFixed(6));
+                      } else {
+                        setUsdtInput((qty * 7 * currentPrice).toFixed(2));
+                      }
                     }
                   }}
                   disabled={running}
@@ -451,16 +525,26 @@ export default function DCABotPage() {
             {/* Stage allocation breakdown */}
             {!isNaN(parseFloat(quantity)) && parseFloat(quantity) > 0 && currentPrice > 0 && (() => {
               const qty = parseFloat(quantity);
-              const perTrade = qty * currentPrice;
-              const maxExposure = qty * 7 * currentPrice;
-              const pctUsed = freeQuote > 0 ? (maxExposure / freeQuote) * 100 : 0;
+              const stageMultipliers = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
+              const budgetPool = isShort ? freeBase : freeQuote;
+              // Calculate actual cumulative exposure using real multipliers
+              let cumQty = 0;
+              const cumulatives: number[] = [];
+              for (let i = 0; i < 7; i++) {
+                const stageQty = i === 0 ? qty : qty * stageMultipliers[i];
+                cumQty += stageQty;
+                cumulatives.push(isShort ? cumQty : cumQty * currentPrice);
+              }
+              const maxExposureValue = cumulatives[6];
+              const pctUsed = budgetPool > 0 ? (maxExposureValue / budgetPool) * 100 : 0;
+              const unit = isShort ? baseAsset : '';
               return (
               <div className="rounded space-y-1.5 px-2 py-2" style={{ background: '#060d18', border: '1px solid #1a2538' }}>
                 <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: '#4b5563' }}>Stage Allocation</div>
                 {Array.from({ length: 7 }, (_, i) => {
                   const stage = i + 1;
-                  const cumulative = perTrade * stage;
-                  const cumPct = freeQuote > 0 ? (cumulative / freeQuote) * 100 : 0;
+                  const cumulative = cumulatives[i];
+                  const cumPct = budgetPool > 0 ? (cumulative / budgetPool) * 100 : 0;
                   const isCurrent = ps?.inPosition && ps.dcaStage === stage;
                   const isPast = ps?.inPosition && ps.dcaStage > stage;
                   return (
@@ -475,27 +559,31 @@ export default function DCABotPage() {
                         <div
                           className="h-full rounded-full"
                           style={{
-                            width: freeQuote > 0 ? `${Math.min(100, cumPct)}%` : `${(stage / 7) * 100}%`,
+                            width: budgetPool > 0 ? `${Math.min(100, cumPct)}%` : `${(cumulative / maxExposureValue) * 100}%`,
                             background: isCurrent ? '#f97316' : isPast ? '#22c55e' : '#1e3a5f',
                           }}
                         />
                       </div>
                       <span className="text-[9px] font-mono w-14 text-right flex-shrink-0" style={{ color: isCurrent ? '#f97316' : isPast ? '#22c55e' : '#6b7280' }}>
-                        ${cumulative >= 1000 ? `${(cumulative / 1000).toFixed(1)}k` : cumulative.toFixed(0)}
+                        {isShort
+                          ? `${cumulative >= 1 ? cumulative.toFixed(4) : cumulative.toFixed(6)} ${unit}`
+                          : `$${cumulative >= 1000 ? `${(cumulative / 1000).toFixed(1)}k` : cumulative.toFixed(0)}`}
                       </span>
                     </div>
                   );
                 })}
                 <div className="pt-1 border-t space-y-0.5" style={{ borderColor: '#1a2538' }}>
                   <div className="flex justify-between text-[9px] font-mono">
-                    <span style={{ color: '#6b7280' }}>Per trade</span>
+                    <span style={{ color: '#6b7280' }}>Per {isShort ? 'sell' : 'trade'}</span>
                     <span style={{ color: '#C7D1DB' }}>{qty.toFixed(6)} {baseAsset}</span>
                   </div>
                   <div className="flex justify-between text-[9px] font-mono">
                     <span style={{ color: '#6b7280' }}>Max exposure</span>
                     <span style={{ color: pctUsed > 80 ? '#ef4444' : '#f59e0b' }}>
-                      ${maxExposure.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      {freeQuote > 0 && <span style={{ color: '#6b7280' }}> ({Math.min(100, pctUsed).toFixed(1)}%)</span>}
+                      {isShort
+                        ? `${maxExposureValue.toFixed(4)} ${baseAsset}`
+                        : `$${maxExposureValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                      {budgetPool > 0 && <span style={{ color: '#6b7280' }}> ({Math.min(100, pctUsed).toFixed(1)}%)</span>}
                     </span>
                   </div>
                 </div>
@@ -516,6 +604,57 @@ export default function DCABotPage() {
               onChange={e => setPmStartPct(e.target.value)}
               disabled={running}
             />
+          </div>
+
+          {/* Risk Protection */}
+          <div className="rounded px-2 py-2 space-y-2" style={{ background: '#0d0507', border: '1px solid #2d1215' }}>
+            <div className="text-[9px] font-mono uppercase tracking-widest" style={{ color: '#ef4444' }}>⚠ Risk Protection</div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Max Drawdown %</Label>
+                <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>force-close limit</span>
+              </div>
+              <Input
+                className="h-7 mt-1 text-xs font-mono"
+                type="number" step="1" min="1" max="100"
+                value={maxDrawdownPct}
+                onChange={e => setMaxDrawdownPct(e.target.value)}
+                disabled={running}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Daily Loss Limit ($)</Label>
+                <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>0 = disabled</span>
+              </div>
+              <Input
+                className="h-7 mt-1 text-xs font-mono"
+                type="number" step="10" min="0"
+                value={dailyLossLimit}
+                onChange={e => setDailyLossLimit(e.target.value)}
+                disabled={running}
+              />
+            </div>
+
+            {/* Live risk status */}
+            {ps && (ps.circuitBreakerHits > 0 || ps.dailyLossTotal > 0) && (
+              <div className="space-y-0.5 pt-1 border-t" style={{ borderColor: '#2d1215' }}>
+                {ps.circuitBreakerHits > 0 && (
+                  <div className="flex justify-between text-[9px] font-mono">
+                    <span style={{ color: '#ef4444' }}>Circuit breaker hits</span>
+                    <span style={{ color: '#ef4444' }}>{ps.circuitBreakerHits}</span>
+                  </div>
+                )}
+                {ps.dailyLossTotal > 0 && (
+                  <div className="flex justify-between text-[9px] font-mono">
+                    <span style={{ color: '#f59e0b' }}>Today&apos;s losses</span>
+                    <span style={{ color: '#f59e0b' }}>${ps.dailyLossTotal.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -641,13 +780,15 @@ export default function DCABotPage() {
       </div>
       {ps?.inPosition ? (
         <div className="flex items-center gap-3 ml-2">
-          <span className="text-[10px] font-mono" style={{ color: '#6b7280' }}>IN POSITION</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: activeIsShort ? '#ef444415' : '#00FF6615', color: activeIsShort ? '#ef4444' : '#00FF66' }}>
+            {activeIsShort ? 'SELL' : 'LONG'}
+          </span>
           <span className="text-[10px] font-mono font-bold" style={{ color: pnl >= 0 ? '#00FF66' : '#ef4444' }}>
             {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} ({pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
           </span>
         </div>
       ) : running ? (
-        <span className="text-[10px] font-mono" style={{ color: '#6b7280' }}>waiting for entry signal…</span>
+        <span className="text-[10px] font-mono" style={{ color: '#6b7280' }}>waiting for {activeIsShort ? 'sell' : 'entry'} signal…</span>
       ) : null}
       {botStatus?.lastSignal && (
         <div className="ml-auto flex items-center gap-1.5">
@@ -914,6 +1055,12 @@ function BotRow({ bot, isSelected, onView, onStop, onDelete }: {
           />
           <span className="text-[11px] font-mono font-bold truncate" style={{ color: isSelected ? '#E6EDF3' : '#C7D1DB' }}>
             {bot.symbol}
+          </span>
+          <span className="text-[9px] font-mono px-1 rounded font-bold" style={{
+            background: (bot.config?.side === 'short') ? '#ef444415' : '#00FF6615',
+            color: (bot.config?.side === 'short') ? '#ef4444' : '#00FF66',
+          }}>
+            {(bot.config?.side === 'short') ? 'SELL' : 'LONG'}
           </span>
           <span className="text-[9px] font-mono px-1 rounded" style={{ background: '#1a2538', color: '#6b7280' }}>
             {bot.timeframe}
