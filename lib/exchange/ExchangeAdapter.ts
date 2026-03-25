@@ -22,8 +22,8 @@ export class ExchangeAdapter {
     }
   }
 
-  async fetchOHLCV(symbol: string, timeframe: string, limit = 200): Promise<OHLCVCandle[]> {
-    const raw = await this.exchange.fetchOHLCV(symbol, timeframe, undefined, limit);
+  async fetchOHLCV(symbol: string, timeframe: string, limit = 200, since?: number): Promise<OHLCVCandle[]> {
+    const raw = await this.exchange.fetchOHLCV(symbol, timeframe, since, limit);
     return (raw as [number, number, number, number, number, number][]).map(
       ([timestamp, open, high, low, close, volume]) => ({ timestamp, open, high, low, close, volume })
     );

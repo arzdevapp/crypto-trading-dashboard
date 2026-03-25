@@ -11,6 +11,7 @@ import type { BaseStrategy } from './BaseStrategy';
 interface NeuralAwareStrategy {
   setNeuralLevels(long: number, short: number): void;
   setNewsSentiment(score: number, label: string): void;
+  setMacroTrend?(trend: 'bullish' | 'bearish'): void;
 }
 
 // Stateful strategies that can persist/restore position state across restarts
@@ -126,6 +127,23 @@ export async function startStrategy(strategyId: string): Promise<void> {
         try {
           const sentiment = await getNewsSentiment(record.symbol);
           (strategy as unknown as NeuralAwareStrategy).setNewsSentiment(sentiment.score, sentiment.label);
+        } catch { /* non-fatal */ }
+
+        try {
+          const macroTimeframe = config.macroTimeframe as string;
+          if (macroTimeframe) {
+            const macroCandles = await adapter.fetchOHLCV(record.symbol, macroTimeframe, 30);
+            if (macroCandles.length >= 21) {
+              const { ema } = await import('./indicators/ema');
+              const closes = macroCandles.map(c => c.close);
+              const ema9 = ema(closes, 9);
+              const ema21 = ema(closes, 21);
+              const trend = ema9[ema9.length - 1] > ema21[ema21.length - 1] ? 'bullish' : 'bearish';
+              if (typeof (strategy as unknown as NeuralAwareStrategy).setMacroTrend === 'function') {
+                (strategy as unknown as NeuralAwareStrategy).setMacroTrend!(trend);
+              }
+            }
+          }
         } catch { /* non-fatal */ }
       }
 

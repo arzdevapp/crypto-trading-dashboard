@@ -14,7 +14,7 @@ export async function loadHistoricalData(
   const endTs = endDate.getTime();
 
   while (since < endTs) {
-    const candles = await adapter.fetchOHLCV(symbol, timeframe, limit);
+    const candles = await adapter.fetchOHLCV(symbol, timeframe, limit, since);
     if (!candles.length) break;
 
     const filtered = candles.filter((c) => c.timestamp >= since && c.timestamp <= endTs);

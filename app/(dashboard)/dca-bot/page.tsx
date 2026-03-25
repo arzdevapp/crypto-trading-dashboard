@@ -116,6 +116,10 @@ export default function DCABotPage() {
   const [maxDrawdownPct, setMaxDrawdownPct] = useState('25');
   const [dailyLossLimit, setDailyLossLimit] = useState('0');
   const [side, setSide] = useState<'long' | 'short'>('long');
+  const [useAtrSizing, setUseAtrSizing] = useState(false);
+  const [baselineAtrPct, setBaselineAtrPct] = useState('2.0');
+  const [filterMacroTrend, setFilterMacroTrend] = useState(false);
+  const [macroTimeframe, setMacroTimeframe] = useState('4h');
   const isShort = side === 'short';
   const queryClient = useQueryClient();
 
@@ -229,6 +233,10 @@ export default function DCABotPage() {
             pmStartPctDCA: Number(pmStartPct) / 2,
             maxDrawdownPct: Number(maxDrawdownPct),
             dailyLossLimit: Number(dailyLossLimit),
+            useAtrSizing,
+            baselineAtrPct: Number(baselineAtrPct),
+            filterMacroTrend,
+            macroTimeframe: filterMacroTrend ? macroTimeframe : undefined,
           },
         }),
       });
@@ -590,6 +598,63 @@ export default function DCABotPage() {
               </div>
               );
             })()}
+
+            {/* ATR Volatility Sizing */}
+            <div className="space-y-2 pt-2 mt-4 border-t" style={{ borderColor: '#1a2538' }}>
+              <div className="flex items-center justify-between">
+                <div 
+                  className="flex items-center gap-2 cursor-pointer" 
+                  onClick={() => !running && setUseAtrSizing(!useAtrSizing)}
+                >
+                  <div className={`w-3 h-3 rounded-full flex-shrink-0 border flex items-center justify-center ${useAtrSizing ? 'bg-[#00E5FF] border-[#00E5FF]' : 'border-[#4b5563] bg-transparent'}`}>
+                    {useAtrSizing && <div className="w-1.5 h-1.5 bg-[#070B10] rounded-full" />}
+                  </div>
+                  <Label className="text-[10px] font-mono cursor-pointer" style={{ color: '#9ca3af' }}>ATR Volatility Sizing</Label>
+                </div>
+                {useAtrSizing && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>Target ATR:</span>
+                    <Input 
+                      className="h-6 w-14 text-[10px] font-mono px-1 py-0 text-center" 
+                      value={baselineAtrPct} 
+                      onChange={e => setBaselineAtrPct(e.target.value)} 
+                      disabled={running} 
+                    />
+                    <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>%</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Macro Trend Filter */}
+            <div className="space-y-2 pt-2 mt-4 border-t" style={{ borderColor: '#1a2538' }}>
+              <div className="flex items-center justify-between">
+                <div 
+                  className="flex items-center gap-2 cursor-pointer" 
+                  onClick={() => !running && setFilterMacroTrend(!filterMacroTrend)}
+                >
+                  <div className={`w-3 h-3 rounded-full flex-shrink-0 border flex items-center justify-center ${filterMacroTrend ? 'bg-[#00E5FF] border-[#00E5FF]' : 'border-[#4b5563] bg-transparent'}`}>
+                    {filterMacroTrend && <div className="w-1.5 h-1.5 bg-[#070B10] rounded-full" />}
+                  </div>
+                  <Label className="text-[10px] font-mono cursor-pointer" style={{ color: '#9ca3af' }}>Macro Filter</Label>
+                </div>
+                {filterMacroTrend && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>Timeframe:</span>
+                    <select
+                      value={macroTimeframe}
+                      onChange={e => setMacroTimeframe(e.target.value)}
+                      disabled={running}
+                      className="h-6 text-[10px] font-mono rounded border px-1"
+                      style={{ background: '#0a0f18', borderColor: '#243044', color: '#C7D1DB' }}
+                    >
+                      {['1h','4h','12h','1d','1w'].map(tf => <option key={tf} value={tf}>{tf}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
 
           <div>

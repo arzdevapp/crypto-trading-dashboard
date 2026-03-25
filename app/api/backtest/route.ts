@@ -1,51 +1,84 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { createStrategy } from '@/lib/strategies/StrategyRegistry';
-import { runBacktest } from '@/lib/backtesting/BacktestEngine';
 import { getExchangeAdapter } from '@/lib/exchange/ExchangeFactory';
+import { loadHistoricalData } from '@/lib/backtesting/HistoricalDataLoader';
+import { runBacktest } from '@/lib/backtesting/BacktestEngine';
+import { createStrategy } from '@/lib/strategies/StrategyRegistry';
+import { getPredictor } from '@/lib/ml/InstancePredictor';
+import { getNewsSentiment } from '@/lib/news/NewsSentimentScorer';
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const { strategyId, symbol, timeframe, startDate, endDate, initialCapital = 10000, commissionRate = 0.001, slippagePct = 0.0005 } = body;
-
-  if (!strategyId || !symbol || !timeframe || !startDate || !endDate) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-  }
-
   try {
-    const strategyRecord = await prisma.strategy.findUnique({ where: { id: strategyId } });
-    if (!strategyRecord) return NextResponse.json({ error: 'Strategy not found' }, { status: 404 });
+    const { strategyType, exchangeId, symbol, timeframe, startDate, endDate, initialCapital, config } = await req.json();
 
-    const config = JSON.parse(strategyRecord.config);
-    const strategy = createStrategy(strategyRecord.type, { ...config, symbol, timeframe, exchangeId: strategyRecord.exchangeId });
+    if (!strategyType || !exchangeId || !symbol || !timeframe || !startDate || !endDate) {
+      return NextResponse.json({ error: 'Missing required backtest parameters' }, { status: 400 });
+    }
 
-    const adapter = await getExchangeAdapter(strategyRecord.exchangeId);
-    const candles = await adapter.fetchOHLCV(symbol, timeframe, 500);
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
-    const metrics = await runBacktest(strategy, { candles, initialCapital, commissionRate, slippagePct });
+    const adapter = await getExchangeAdapter(exchangeId);
+    
+    // Add caching or direct loading
+    console.log(`[Backtest] Fetching historical data for ${symbol} on ${timeframe}...`);
+    const candles = await loadHistoricalData(adapter, symbol, timeframe, start, end);
+    console.log(`[Backtest] Loaded ${candles.length} candles.`);
 
-    const result = await prisma.backtestResult.create({
-      data: {
-        strategyId,
-        symbol,
-        timeframe,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        initialCapital,
-        finalCapital: metrics.finalCapital,
-        totalTrades: metrics.totalTrades,
-        winRate: metrics.winRate,
-        sharpeRatio: metrics.sharpeRatio,
-        maxDrawdown: metrics.maxDrawdownPct,
-        profitFactor: metrics.profitFactor,
-        tradesJson: JSON.stringify(metrics.trades),
-        equityCurveJson: JSON.stringify(metrics.equityCurve),
-      },
+    if (candles.length < 50) {
+      return NextResponse.json({ error: `Not enough historical data returned (only ${candles.length} candles). Please select a longer date range.` }, { status: 400 });
+    }
+
+    const strategy = createStrategy(strategyType, {
+      exchangeId,
+      symbol,
+      timeframe,
+      ...config,
     });
 
-    return NextResponse.json({ ...result, metrics }, { status: 201 });
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    // No initialize() needed for backtest — the engine feeds candles sequentially
+    // which naturally warms up the strategy.
+
+    let predictor: any = null;
+    if (strategyType === 'POWER_TRADER') {
+      try {
+        predictor = await getPredictor(symbol);
+      } catch (e) {
+        console.warn(`[Backtest] Could not load ML predictor for ${symbol}:`, e);
+      }
+    }
+
+    const metrics = await runBacktest(strategy, {
+      candles,
+      initialCapital: initialCapital || 1000,
+      commissionRate: 0.001, // 0.1% typical spot fee
+      slippagePct: 0.05,     // 0.05% typical slippage
+      onBeforeCandle: async (strat: any, candle: any) => {
+        if (strategyType === 'POWER_TRADER' && typeof strat.setNeuralLevels === 'function') {
+          let longLvl = 0;
+          let shortLvl = 0;
+          if (predictor && predictor.isTrainedFor(timeframe)) {
+            const pred = predictor.predict(timeframe, candle, candle.close);
+            longLvl = pred.longSignalCount;
+            shortLvl = pred.shortSignalCount;
+          }
+          strat.setNeuralLevels(longLvl, shortLvl);
+
+          // Simulated neutral backtest news sentiment
+          if (typeof strat.setNewsSentiment === 'function') {
+            strat.setNewsSentiment(0, 'Neutral');
+          }
+        }
+      }
+    });
+
+    return NextResponse.json({
+      metrics,
+      candleCount: candles.length,
+      start: candles[0].timestamp,
+      end: candles[candles.length - 1].timestamp
+    });
+  } catch (error) {
+    console.error('[Backtest API Error]', error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }

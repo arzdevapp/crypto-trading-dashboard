@@ -1,6 +1,7 @@
 import { BaseStrategy } from '../BaseStrategy';
 import type { Signal, StrategyConfig } from '@/types/strategy';
 import type { OHLCVCandle } from '@/types/exchange';
+import { atr } from '../indicators/atr';
 
 export interface DCALevel {
   neuralTrigger: number;   // signal level threshold
@@ -110,6 +111,30 @@ export class PowerTraderStrategy extends BaseStrategy {
       }
     }
 
+    // === ATR Volatility Sizing ===
+    const useAtrSizing = cfg.useAtrSizing as boolean ?? false;
+    let atrLog = '';
+    if (useAtrSizing && candles.length > 20) {
+      const atrPeriod = cfg.atrPeriod as number ?? 14;
+      const baselineAtrPct = cfg.baselineAtrPct as number ?? 2.0; // Assume 2% volatility is "normal 1x size"
+      
+      const atrs = atr(candles, atrPeriod);
+      const currentAtr = atrs[atrs.length - 1];
+      
+      if (currentAtr > 0) {
+        const currentAtrPct = (currentAtr / currentPrice) * 100;
+        // Inverse volatility scaling: (Baseline ATR / Current ATR)
+        // Cap multiplier at 2.5x to prevent over-leverage on completely flat charts
+        // Floor at 0.1x to ensure we don't buy 0 on mega-wicks
+        let sizingMultiplier = baselineAtrPct / currentAtrPct;
+        if (sizingMultiplier > 2.5) sizingMultiplier = 2.5; 
+        if (sizingMultiplier < 0.1) sizingMultiplier = 0.1;
+        
+        baseQuantity = baseQuantity * sizingMultiplier;
+        atrLog = ` (ATR: ${currentAtrPct.toFixed(2)}%, Size: ${sizingMultiplier.toFixed(2)}x)`;
+      }
+    }
+
     const dcaLevels: DCALevel[] = (cfg.dcaLevels as DCALevel[]) ?? DEFAULT_DCA_LEVELS;
 
     // === Reset daily loss counter at midnight UTC ===
@@ -211,6 +236,18 @@ export class PowerTraderStrategy extends BaseStrategy {
       }
     }
 
+    // === HARD BLOCK: Macro Trend Filter ===
+    const filterMacroTrend = cfg.filterMacroTrend as boolean ?? false;
+    const macroTrend = cfg._macroTrend as string | undefined;
+    if (!this.state.inPosition && filterMacroTrend && macroTrend) {
+      if (isShort && macroTrend === 'bullish') {
+        return { action: 'hold', reason: `Macro block: Higher timeframe trend is bullish — too risky for short entry` };
+      }
+      if (!isShort && macroTrend === 'bearish') {
+        return { action: 'hold', reason: `Macro block: Higher timeframe trend is bearish — waiting for reversal` };
+      }
+    }
+
     // === ENTRY LOGIC ===
     if (!this.state.inPosition) {
       if (isShort) {
@@ -228,7 +265,7 @@ export class PowerTraderStrategy extends BaseStrategy {
             action: 'sell',
             quantity: baseQuantity,
             price: currentPrice,
-            reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}`,
+            reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog}`,
           };
         }
         return { action: 'hold', reason: `Waiting: neural short=${neuralShortLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
@@ -247,7 +284,7 @@ export class PowerTraderStrategy extends BaseStrategy {
             action: 'buy',
             quantity: baseQuantity,
             price: currentPrice,
-            reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}`,
+            reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog}`,
           };
         }
         return { action: 'hold', reason: `Waiting: neural=${neuralLongLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
@@ -349,6 +386,10 @@ export class PowerTraderStrategy extends BaseStrategy {
   setNewsSentiment(score: number, label: string): void {
     (this.config as Record<string, unknown>)._newsSentiment = score;
     (this.config as Record<string, unknown>)._newsSentimentLabel = label;
+  }
+
+  setMacroTrend(trend: 'bullish' | 'bearish'): void {
+    (this.config as Record<string, unknown>)._macroTrend = trend;
   }
 
   getState(): PowerTraderState {
