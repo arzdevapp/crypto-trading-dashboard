@@ -315,7 +315,7 @@ export default function DCABotPage() {
   const shortSignalCount = shortLevels.length;
 
   const sidebarContent = (
-      <div className="flex flex-col gap-0 h-full overflow-y-auto">
+      <div className="flex flex-col gap-0 h-auto xl:h-full overflow-visible xl:overflow-y-auto">
 
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0" style={{ borderColor: '#1a2538', background: '#070B10' }}>
@@ -877,7 +877,7 @@ export default function DCABotPage() {
 
   // ── Position dashboard panel ──
   const positionPanel = (
-    <div className="h-full overflow-auto border-t" style={{ borderColor: '#1a2538' }}>
+    <div className="h-auto xl:h-full overflow-visible xl:overflow-auto border-t" style={{ borderColor: '#1a2538' }}>
 
       {/* ── Profit Summary ── */}
       <div className="grid grid-cols-3 divide-x border-b" style={{ borderColor: '#1a2538', background: '#060d18' }}>
@@ -1036,7 +1036,24 @@ export default function DCABotPage() {
     </div>
   );
 
-  const rightContent = (
+  const chartContent = (
+    <PriceChart
+      exchangeId={activeExchangeId}
+      symbol={selectedSymbol}
+      longLevels={longLevels}
+      shortLevels={shortLevels}
+      indicators={indicators}
+      overlay={
+        <NeuralLevelsOverlay
+          exchangeId={activeExchangeId}
+          symbol={selectedSymbol}
+          onLevelsUpdate={handleLevelsUpdate}
+        />
+      }
+    />
+  );
+
+  const desktopRightContent = (
     <div className="flex flex-col h-full min-w-0">
       {tickerBar}
       <VerticalSplit
@@ -1044,24 +1061,7 @@ export default function DCABotPage() {
         defaultBottomHeight={180}
         minBottom={100}
         maxBottom={350}
-        top={
-          <div className="h-full">
-            <PriceChart
-              exchangeId={activeExchangeId}
-              symbol={selectedSymbol}
-              longLevels={longLevels}
-              shortLevels={shortLevels}
-              indicators={indicators}
-              overlay={
-                <NeuralLevelsOverlay
-                  exchangeId={activeExchangeId}
-                  symbol={selectedSymbol}
-                  onLevelsUpdate={handleLevelsUpdate}
-                />
-              }
-            />
-          </div>
-        }
+        top={<div className="h-full">{chartContent}</div>}
         bottom={positionPanel}
       />
     </div>
@@ -1070,9 +1070,19 @@ export default function DCABotPage() {
   return (
     <div className="h-full" style={{ background: '#070B10' }}>
       {/* Mobile: stacked, scrollable */}
-      <div className="xl:hidden h-full overflow-y-auto flex flex-col gap-0">
-        {sidebarContent}
-        {rightContent}
+      <div className="xl:hidden h-full overflow-y-auto flex flex-col gap-4 p-2">
+        <div className="rounded-lg border overflow-hidden flex-shrink-0" style={{ background: '#070B10', borderColor: '#1a2538' }}>
+          {sidebarContent}
+        </div>
+        <div className="rounded-lg border overflow-hidden flex-shrink-0" style={{ background: '#070B10', borderColor: '#1a2538' }}>
+          {tickerBar}
+        </div>
+        <div className="h-[350px] flex-shrink-0 rounded-lg overflow-hidden border" style={{ borderColor: '#1a2538' }}>
+          {chartContent}
+        </div>
+        <div className="rounded-lg border overflow-hidden flex-shrink-0 mb-8" style={{ background: '#070B10', borderColor: '#1a2538' }}>
+          {positionPanel}
+        </div>
       </div>
 
       {/* Desktop: resizable horizontal split */}
@@ -1083,7 +1093,7 @@ export default function DCABotPage() {
           minLeft={200}
           maxLeft={420}
           left={sidebarContent}
-          right={rightContent}
+          right={desktopRightContent}
         />
       </div>
     </div>
