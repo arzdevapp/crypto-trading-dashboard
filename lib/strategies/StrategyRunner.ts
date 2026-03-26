@@ -4,6 +4,7 @@ import { prisma } from '../db';
 import { log } from '../logger';
 import { getPredictor } from '../ml/InstancePredictor';
 import { getNewsSentiment } from '../news/NewsSentimentScorer';
+import { RiskManager } from '../risk/RiskManager';
 import type { Signal, StrategyStatus } from '@/types/strategy';
 import type { BaseStrategy } from './BaseStrategy';
 
@@ -111,6 +112,23 @@ export async function startStrategy(strategyId: string): Promise<void> {
     const runner = runners.get(strategyId);
     if (!runner) return; // Runner was stopped/deleted — bail out
     try {
+      // === Global Account-Level Kill Switch ===
+      let totalDailyLoss = 0;
+      for (const r of runners.values()) {
+        const rState = 'getState' in r.strategy ? (r.strategy as unknown as StatefulStrategy).getState() : null;
+        if (rState && typeof (rState as Record<string, unknown>).dailyLossTotal === 'number') {
+          totalDailyLoss += (rState as Record<string, unknown>).dailyLossTotal as number;
+        }
+      }
+      const ACCOUNT_MAX_LOSS = 5000; // Hardcoded $5k account-level drawdown limit
+      if (totalDailyLoss >= ACCOUNT_MAX_LOSS) {
+        await log('error', `global-risk`, `ACCOUNT KILL SWITCH ENGAGED: Total daily loss $${totalDailyLoss.toFixed(2)} >= $${ACCOUNT_MAX_LOSS} limit. Halting all strategies.`);
+        for (const rId of Array.from(runners.keys())) {
+          await stopStrategy(rId);
+        }
+        return;
+      }
+
       const candles = await adapter.fetchOHLCV(record.symbol, record.timeframe, 2);
       if (!candles.length) return;
 
@@ -174,6 +192,45 @@ export async function startStrategy(strategyId: string): Promise<void> {
           return;
         }
 
+        // === RISK MANAGER ENFORCEMENT ===
+        try {
+          const balances = await adapter.fetchBalance();
+          const baseAsset = record.symbol.split('/')[0];
+          const quoteAsset = record.symbol.split('/')[1] || 'USDT';
+          const qBalance = balances[quoteAsset] ?? { free: 0, used: 0, total: 0 };
+          const bBalance = balances[baseAsset] ?? { free: 0, used: 0, total: 0 };
+          const currentPrice = signal.price ?? candles[candles.length - 1].close;
+          const totalValue = qBalance.total + (bBalance.total * currentPrice);
+
+          const rm = new RiskManager({
+            maxPositionSizePct: (config.maxPositionSizePct as number) ?? 95,
+            maxDrawdownPct: (config.maxDrawdownPct as number) ?? 30, // Fallback safe limits
+            defaultStopLossPct: 10,
+            defaultTakeProfitPct: 10,
+            maxOpenPositions: 10
+          });
+
+          const portfolio = {
+            totalValue: totalValue > 0 ? totalValue : 1000,
+            openPositionCount: bBalance.total > (amount / 2) ? 1 : 0,
+            drawdownPct: 0,
+            lastPrice: currentPrice,
+          };
+
+          const validation = rm.validate(signal, portfolio);
+          if (!validation.approved) {
+             if (stateSnapshot && 'restoreState' in strategy) {
+                (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+                await persistState(strategyId, config, strategy);
+             }
+             await log('error', `strategy:${strategyId}`, `RiskManager blocked order: ${validation.errors.join(', ')}`);
+             return;
+          }
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          await log('warn', `strategy:${strategyId}`, `Failed to run RiskManager check: ${errMsg}`);
+        }
+
         // Attempt order with retry for transient failures (max 3 attempts, exponential backoff)
         const MAX_RETRIES = 3;
         let lastErr: Error | null = null;
@@ -221,22 +278,44 @@ export async function startStrategy(strategyId: string): Promise<void> {
 
         // All attempts failed — revert strategy state to keep it in sync with the exchange
         if (lastErr) {
-          if (stateSnapshot && 'restoreState' in strategy) {
-            (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
-            await persistState(strategyId, config, strategy); // persist reverted state
+          // === ORDER RECONCILIATION (GHOST BAG FIX) ===
+          // Even if the API timed out (transient error), the market order might have filled on-chain.
+          try {
+             if (isTransientError(lastErr)) {
+                await sleep(2000); // 2-second buffer for exchange matching engine
+                const recentTrades = await adapter.fetchMyTrades(record.symbol, undefined, 5);
+                // Look for a trade executed in the last 15 seconds matching our side
+                const matchedTrade = recentTrades.find(t => t.side === signal.action && Date.now() - t.timestamp < 15000);
+                
+                if (matchedTrade) {
+                   await log('warn', `strategy:${strategyId}`, `Order reconciliation: API timed out, but trade actually filled! Adopting the ghost bag to preserve sync.`);
+                   await persistState(strategyId, config, strategy);
+                   lastErr = null; // Clear error to skip rollback
+                }
+             }
+          } catch (e) {
+             const errMsg = e instanceof Error ? e.message : String(e);
+             await log('warn', `strategy:${strategyId}`, `Order reconciliation check failed: ${errMsg}`);
           }
 
-          const isSell = signal.action === 'sell';
-          await log('error', `strategy:${strategyId}`,
-            `${isSell ? '⚠️ SELL' : 'BUY'} order failed after ${MAX_RETRIES} attempt(s): ${lastErr.message} — state reverted`,
-            { action: signal.action, amount, symbol: record.symbol });
+          if (lastErr) {
+            if (stateSnapshot && 'restoreState' in strategy) {
+              (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+              await persistState(strategyId, config, strategy); // persist reverted state
+            }
 
-          // Sell failures need special handling — the bot is still holding coins but
-          // the trailing stop fired. Keep the runner alive so it can re-attempt on the
-          // next candle when the price crosses the trailing line again.
-          if (isSell) {
-            statusCallback?.(strategyId, 'running', undefined,
-              `Sell failed: ${lastErr.message} — still holding position, will retry`);
+            const isSell = signal.action === 'sell';
+            await log('error', `strategy:${strategyId}`,
+              `${isSell ? '⚠️ SELL' : 'BUY'} order failed after ${MAX_RETRIES} attempt(s): ${lastErr.message} — state reverted`,
+              { action: signal.action, amount, symbol: record.symbol });
+
+            // Sell failures need special handling — the bot is still holding coins but
+            // the trailing stop fired. Keep the runner alive so it can re-attempt on the
+            // next candle when the price crosses the trailing line again.
+            if (isSell) {
+              statusCallback?.(strategyId, 'running', undefined,
+                `Sell failed: ${lastErr.message} — still holding position, will retry`);
+            }
           }
         }
       }

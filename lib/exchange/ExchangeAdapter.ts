@@ -111,6 +111,20 @@ export class ExchangeAdapter {
     }));
   }
 
+  async fetchMyTrades(symbol: string, since?: number, limit = 50) {
+    const trades = await this.exchange.fetchMyTrades(symbol, since, limit);
+    return trades.map(t => ({
+      id: t.id,
+      symbol: t.symbol,
+      side: t.side as 'buy' | 'sell',
+      price: t.price,
+      amount: t.amount,
+      cost: t.cost,
+      fee: t.fee,
+      timestamp: t.timestamp ?? Date.now(),
+    }));
+  }
+
   async cancelOrder(id: string, symbol: string): Promise<void> {
     await this.exchange.cancelOrder(id, symbol);
   }

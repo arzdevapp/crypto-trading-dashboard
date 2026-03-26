@@ -2,7 +2,6 @@ import { BaseStrategy } from '../BaseStrategy';
 import type { Signal, StrategyConfig } from '@/types/strategy';
 import type { OHLCVCandle } from '@/types/exchange';
 import { atr } from '../indicators/atr';
-import { applyFees } from '../helpers/feeModel';
 import { isBullishTrend } from '../helpers/maCrossover';
 
 export interface DCALevel {
@@ -37,6 +36,7 @@ export interface PowerTraderState {
   circuitBreakerHits: number;
   dailyLossTotal: number;
   dailyLossDate: string;  // YYYY-MM-DD UTC
+  accumulatedFees: number;
 }
 
 export class PowerTraderStrategy extends BaseStrategy {
@@ -59,6 +59,7 @@ export class PowerTraderStrategy extends BaseStrategy {
     circuitBreakerHits: 0,
     dailyLossTotal: 0,
     dailyLossDate: '',
+    accumulatedFees: 0,
   };
 
   constructor(config: StrategyConfig & Record<string, unknown>) {
@@ -104,7 +105,6 @@ export class PowerTraderStrategy extends BaseStrategy {
 
     // Fees and Slippage extraction
     const feePct = cfg.feePct as number ?? 0.1;
-    const slippagePct = cfg.slippagePct as number ?? 0.05;
 
     // Moving Average Trend Filter
     const filterMaTrend = cfg.filterMaTrend as boolean ?? false;
@@ -170,13 +170,18 @@ export class PowerTraderStrategy extends BaseStrategy {
 
     // === CIRCUIT BREAKER: Max Drawdown Stop-Loss ===
     if (this.state.inPosition && this.state.avgCostBasis > 0 && maxDrawdownPct > 0) {
-      const unrealisedPct = isShort
-        ? ((this.state.avgCostBasis - currentPrice) / this.state.avgCostBasis) * 100
-        : ((currentPrice - this.state.avgCostBasis) / this.state.avgCostBasis) * 100;
+      const positionValue = this.state.avgCostBasis * this.state.positionSize;
+      const unrealizedNominal = isShort
+        ? (this.state.avgCostBasis - currentPrice) * this.state.positionSize
+        : (currentPrice - this.state.avgCostBasis) * this.state.positionSize;
+      
+      const estimatedExitFee = (currentPrice * this.state.positionSize) * (feePct / 100);
+      const netPnlNominal = unrealizedNominal - this.state.accumulatedFees - estimatedExitFee;
+      const netUnrealisedPct = positionValue > 0 ? (netPnlNominal / positionValue) * 100 : 0;
 
-      if (unrealisedPct <= -maxDrawdownPct) {
+      if (netUnrealisedPct <= -maxDrawdownPct) {
         const closeQty = this.state.positionSize;
-        const lossAmount = Math.abs(currentPrice - this.state.avgCostBasis) * this.state.positionSize;
+        const lossAmount = Math.abs(netPnlNominal);
         this.state.circuitBreakerHits++;
         this.state.dailyLossTotal += lossAmount;
         const hits = this.state.circuitBreakerHits;
@@ -184,18 +189,19 @@ export class PowerTraderStrategy extends BaseStrategy {
         return {
           action: isShort ? 'buy' : 'sell',
           quantity: closeQty,
-          reason: `⚠ Circuit breaker: ${unrealisedPct.toFixed(1)}% drawdown exceeded ${maxDrawdownPct}% limit — force-closed ${closeQty.toFixed(6)} ${String(cfg.symbol ?? '')} (hit #${hits})`,
+          reason: `⚠ Circuit breaker: ${netUnrealisedPct.toFixed(1)}% drawdown exceeded ${maxDrawdownPct}% limit — force-closed ${closeQty.toFixed(6)} ${String(cfg.symbol ?? '')} (hit #${hits}, loss: $${lossAmount.toFixed(2)})`,
         };
       }
     }
 
     // === TAKE PROFIT: Trailing Profit Margin ===
-    if (this.state.inPosition && this.state.avgCostBasis > 0) {
+    if (this.state.inPosition && this.state.avgCostBasis > 0 && this.state.positionSize > 0) {
       const pmPct = this.state.dcaCount > 0 ? pmStartPctDCA : pmStartPct;
+      const feeOffset = (this.state.accumulatedFees + (this.state.avgCostBasis * this.state.positionSize * feePct / 100)) / this.state.positionSize;
 
       if (isShort) {
         // Short: profit when price drops — trailing PM fires below cost basis
-        const pmBaseLine = this.state.avgCostBasis * (1 - pmPct / 100);
+        const pmBaseLine = this.state.avgCostBasis * (1 - pmPct / 100) - feeOffset;
 
         if (currentPrice <= pmBaseLine) {
           // Activate or update trailing (tracking the trough, line trails above)
@@ -220,7 +226,7 @@ export class PowerTraderStrategy extends BaseStrategy {
         }
       } else {
         // Long: profit when price rises — trailing PM fires above cost basis
-        const pmBaseLine = this.state.avgCostBasis * (1 + pmPct / 100);
+        const pmBaseLine = this.state.avgCostBasis * (1 + pmPct / 100) + feeOffset;
 
         if (currentPrice >= pmBaseLine) {
           if (!this.state.pmActive) {
@@ -282,10 +288,11 @@ export class PowerTraderStrategy extends BaseStrategy {
       if (isShort) {
         // Short entry: neural short signal fires, no conflicting long
         if (neuralShortLevel >= effectiveStartLevel && neuralLongLevel === 0) {
-          const entryPrice = applyFees(currentPrice, feePct, slippagePct, 'sell');
+          const entryFee = (currentPrice * baseQuantity) * (feePct / 100);
           this.state.inPosition = true;
-          this.state.avgCostBasis = entryPrice;
+          this.state.avgCostBasis = currentPrice;
           this.state.positionSize = baseQuantity;
+          this.state.accumulatedFees += entryFee;
           this.state.dcaStage = 0;
           this.state.dcaCount = 0;
           this.state.pmActive = false;
@@ -295,17 +302,18 @@ export class PowerTraderStrategy extends BaseStrategy {
             action: 'sell',
             quantity: baseQuantity,
             price: currentPrice,
-            reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost basis: ${entryPrice.toFixed(4)})`,
+            reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost: ${currentPrice.toFixed(4)})`,
           };
         }
         return { action: 'hold', reason: `Waiting: neural short=${neuralShortLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
       } else {
         // Long entry: neural long signal fires, no conflicting short
         if (neuralLongLevel >= effectiveStartLevel && neuralShortLevel === 0) {
-          const entryPrice = applyFees(currentPrice, feePct, slippagePct, 'buy');
+          const entryFee = (currentPrice * baseQuantity) * (feePct / 100);
           this.state.inPosition = true;
-          this.state.avgCostBasis = entryPrice;
+          this.state.avgCostBasis = currentPrice;
           this.state.positionSize = baseQuantity;
+          this.state.accumulatedFees += entryFee;
           this.state.dcaStage = 0;
           this.state.dcaCount = 0;
           this.state.pmActive = false;
@@ -315,7 +323,7 @@ export class PowerTraderStrategy extends BaseStrategy {
             action: 'buy',
             quantity: baseQuantity,
             price: currentPrice,
-            reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost basis: ${entryPrice.toFixed(4)})`,
+            reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost: ${currentPrice.toFixed(4)})`,
           };
         }
         return { action: 'hold', reason: `Waiting: neural=${neuralLongLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
@@ -355,15 +363,16 @@ export class PowerTraderStrategy extends BaseStrategy {
         }
 
         const triggerSignalLevel = isShort ? neuralShortLevel : neuralLongLevel;
-        const entryPrice = applyFees(currentPrice, feePct, slippagePct, isShort ? 'sell' : 'buy');
+        const entryFee = (currentPrice * dcaQty) * (feePct / 100);
         const reason = neuralTriggered
-          ? `DCA stage ${this.state.dcaStage + 1}: neural level ${triggerSignalLevel} (Cost: ${entryPrice.toFixed(4)})`
-          : `DCA stage ${this.state.dcaStage + 1}: ${rawPctChange.toFixed(1)}% ${isShort ? 'adverse rise' : 'drawdown'} (Cost: ${entryPrice.toFixed(4)})`;
+          ? `DCA stage ${this.state.dcaStage + 1}: neural level ${triggerSignalLevel} (Cost: ${currentPrice.toFixed(4)})`
+          : `DCA stage ${this.state.dcaStage + 1}: ${rawPctChange.toFixed(1)}% ${isShort ? 'adverse rise' : 'drawdown'} (Cost: ${currentPrice.toFixed(4)})`;
 
         // Update avg cost basis
-        const totalCost = this.state.avgCostBasis * this.state.positionSize + entryPrice * dcaQty;
+        const totalCost = this.state.avgCostBasis * this.state.positionSize + currentPrice * dcaQty;
         this.state.positionSize += dcaQty;
         this.state.avgCostBasis = totalCost / this.state.positionSize;
+        this.state.accumulatedFees += entryFee;
         this.state.dcaStage++;
         this.state.dcaCount++;
         this.state.pmActive = false; // reset trailing on DCA
@@ -379,12 +388,17 @@ export class PowerTraderStrategy extends BaseStrategy {
       }
     }
 
-    const gainLossPct = isShort
-      ? ((this.state.avgCostBasis - currentPrice) / this.state.avgCostBasis) * 100  // short profits when price drops
-      : ((currentPrice - this.state.avgCostBasis) / this.state.avgCostBasis) * 100;
+    const positionValue = this.state.avgCostBasis * this.state.positionSize;
+    const unrealizedNominal = isShort
+      ? (this.state.avgCostBasis - currentPrice) * this.state.positionSize
+      : (currentPrice - this.state.avgCostBasis) * this.state.positionSize;
+    const estimatedExitFee = (currentPrice * this.state.positionSize) * (feePct / 100);
+    const netPnlNominal = unrealizedNominal - this.state.accumulatedFees - estimatedExitFee;
+    const netGainLossPct = positionValue > 0 ? (netPnlNominal / positionValue) * 100 : 0;
+    
     return {
       action: 'hold',
-      reason: `Holding ${isShort ? 'sell' : 'long'} position. P&L: ${gainLossPct.toFixed(2)}%, DCA: ${this.state.dcaStage}/${dcaLevels.length}`,
+      reason: `Holding ${isShort ? 'sell' : 'long'} position. Net P&L: ${netGainLossPct.toFixed(2)}%, DCA: ${this.state.dcaStage}/${dcaLevels.length}`,
     };
   }
 
@@ -407,6 +421,7 @@ export class PowerTraderStrategy extends BaseStrategy {
       circuitBreakerHits,
       dailyLossTotal,
       dailyLossDate,
+      accumulatedFees: 0,
     };
   }
 

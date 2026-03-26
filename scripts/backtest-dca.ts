@@ -1,7 +1,7 @@
 import { ExchangeAdapter } from '../lib/exchange/ExchangeAdapter';
 import { loadHistoricalData } from '../lib/backtesting/HistoricalDataLoader';
 import { BacktestBroker } from '../lib/backtesting/BacktestBroker';
-import { DayTraderStrategy } from '../lib/strategies/implementations/DayTraderStrategy';
+import { PowerTraderStrategy } from '../lib/strategies/implementations/PowerTraderStrategy';
 import { InstancePredictor } from '../lib/ml/InstancePredictor';
 import * as dotenv from 'dotenv';
 import path from 'path';
@@ -30,23 +30,24 @@ async function runBacktest() {
 
   // Create strategy config with enhancements enabled
   const strategyConfig = {
+    exchangeId: 'binance',
     symbol,
     timeframe,
-    accountEquity: 1000, // Initial capital in base curr
-    riskPct: 1.0,        // Risk 1% per trade using ATR sizing
-    atrWindow: 14,
-    shortMaPeriod: 5,
-    longMaPeriod: 20,
+    side: 'long',
+    useAtrSizing: true,
+    baselineAtrPct: 2.0,
+    atrPeriod: 14,
     feePct: 0.1,         // 0.1% maker/taker fee
     slippagePct: 0.05,   // 0.05% slippage
-    stopLossPct: 1.5,
-    takeProfitPct: 2.0,
-    entrySignalMin: 3,
-    maxTradesPerDay: 5,
-    newsBlockThresh: -0.4,
+    maxDrawdownPct: 25,
+    pmStartPct: 5.0,
+    pmStartPctDCA: 2.5,
+    trailingGapPct: 1.5,
+    quantity: 0.001,
+    tradeStartLevel: 3,
   };
 
-  const strategy = new DayTraderStrategy(strategyConfig);
+  const strategy = new PowerTraderStrategy(strategyConfig);
   await strategy.initialize(async () => candles.slice(0, 50)); // Mock adapter hook
 
   const predictor = new InstancePredictor(symbol);
