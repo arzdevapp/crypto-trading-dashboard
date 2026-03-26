@@ -210,10 +210,31 @@ export async function startStrategy(strategyId: string): Promise<void> {
             maxOpenPositions: 10
           });
 
+          // Estimate drawdown from strategy state if available
+          let drawdownPct = 0;
+          if ('getState' in strategy) {
+            const sState = (strategy as unknown as StatefulStrategy).getState() as Record<string, unknown>;
+            if (typeof sState.peakEquity === 'number' && sState.peakEquity > 0) {
+              drawdownPct = ((sState.peakEquity - totalValue) / sState.peakEquity) * 100;
+              if (drawdownPct < 0) drawdownPct = 0;
+            }
+          }
+
+          // Count actual open positions across all runners
+          let openPositionCount = 0;
+          for (const r of runners.values()) {
+            if ('getState' in r.strategy) {
+              const rs = (r.strategy as unknown as StatefulStrategy).getState() as Record<string, unknown>;
+              if (rs.inPosition === true || (typeof rs.positionSize === 'number' && rs.positionSize > 0)) {
+                openPositionCount++;
+              }
+            }
+          }
+
           const portfolio = {
             totalValue: totalValue > 0 ? totalValue : 1000,
-            openPositionCount: bBalance.total > (amount / 2) ? 1 : 0,
-            drawdownPct: 0,
+            openPositionCount,
+            drawdownPct,
             lastPrice: currentPrice,
           };
 
@@ -226,9 +247,20 @@ export async function startStrategy(strategyId: string): Promise<void> {
              await log('error', `strategy:${strategyId}`, `RiskManager blocked order: ${validation.errors.join(', ')}`);
              return;
           }
+          // Apply risk-adjusted stop-loss/take-profit if the strategy didn't set them
+          if (validation.adjustedSignal) {
+            signal.stopLoss = signal.stopLoss ?? validation.adjustedSignal.stopLoss;
+            signal.takeProfit = signal.takeProfit ?? validation.adjustedSignal.takeProfit;
+          }
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
-          await log('warn', `strategy:${strategyId}`, `Failed to run RiskManager check: ${errMsg}`);
+          await log('error', `strategy:${strategyId}`, `RiskManager check failed — blocking order: ${errMsg}`);
+          // Revert state — cannot place order without risk validation
+          if (stateSnapshot && 'restoreState' in strategy) {
+            (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+            await persistState(strategyId, config, strategy);
+          }
+          return;
         }
 
         // Attempt order with retry for transient failures (max 3 attempts, exponential backoff)

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getExchangeAdapter } from '@/lib/exchange/ExchangeFactory';
 import { loadHistoricalData } from '@/lib/backtesting/HistoricalDataLoader';

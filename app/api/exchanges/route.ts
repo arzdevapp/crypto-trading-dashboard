@@ -21,7 +21,9 @@ export async function POST(req: Request) {
     const exchange = await prisma.exchangeConfig.create({
       data: { name, label, apiKey: encrypt(apiKey), apiSecret: encrypt(apiSecret), sandbox: sandbox ?? true },
     });
-    return NextResponse.json(exchange, { status: 201 });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { apiKey: _k, apiSecret: _s, ...safeExchange } = exchange;
+    return NextResponse.json(safeExchange, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

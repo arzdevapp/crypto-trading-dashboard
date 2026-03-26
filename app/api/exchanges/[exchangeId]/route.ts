@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { stopStrategy } from '@/lib/strategies/StrategyRunner';
+import { clearExchangeCache } from '@/lib/exchange/ExchangeFactory';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ exchangeId: string }> }) {
   try {
@@ -31,6 +32,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ exch
     }
     await prisma.strategy.deleteMany({ where: { exchangeId } });
     await prisma.exchangeConfig.delete({ where: { id: exchangeId } });
+    clearExchangeCache(exchangeId);
 
     return NextResponse.json({ success: true });
   } catch (err) {

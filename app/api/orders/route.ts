@@ -18,16 +18,44 @@ export async function GET(req: Request) {
   }
 }
 
+const VALID_SIDES = ['buy', 'sell'] as const;
+const VALID_TYPES = ['market', 'limit', 'stop'] as const;
+
 export async function POST(req: Request) {
-  const body = await req.json();
-  const { exchangeId, symbol, type, side, amount, price, stopPrice } = body;
-  if (!exchangeId || !symbol || !type || !side || !amount) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const { exchangeId, symbol, type, side, amount, price, stopPrice } = body as {
+    exchangeId?: string; symbol?: string; type?: string; side?: string;
+    amount?: number; price?: number; stopPrice?: number;
+  };
+
+  if (!exchangeId || !symbol || !type || !side) {
+    return NextResponse.json({ error: 'Missing required fields: exchangeId, symbol, type, side' }, { status: 400 });
+  }
+  if (!VALID_SIDES.includes(side as typeof VALID_SIDES[number])) {
+    return NextResponse.json({ error: `Invalid side: must be 'buy' or 'sell'` }, { status: 400 });
+  }
+  if (!VALID_TYPES.includes(type as typeof VALID_TYPES[number])) {
+    return NextResponse.json({ error: `Invalid type: must be 'market', 'limit', or 'stop'` }, { status: 400 });
+  }
+  if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
+    return NextResponse.json({ error: 'amount must be a positive number' }, { status: 400 });
+  }
+  if (type === 'limit' && (typeof price !== 'number' || !isFinite(price) || price <= 0)) {
+    return NextResponse.json({ error: 'Limit orders require a positive price' }, { status: 400 });
+  }
+  if (type === 'stop' && (typeof stopPrice !== 'number' || !isFinite(stopPrice) || stopPrice <= 0)) {
+    return NextResponse.json({ error: 'Stop orders require a positive stopPrice' }, { status: 400 });
   }
 
   try {
     const adapter = await getExchangeAdapter(exchangeId);
-    const order = await adapter.placeOrder({ symbol, type, side, amount, price, stopPrice });
+    const order = await adapter.placeOrder({ symbol, type: type as 'market' | 'limit' | 'stop', side: side as 'buy' | 'sell', amount, price, stopPrice });
 
     await prisma.trade.create({
       data: {
@@ -36,7 +64,7 @@ export async function POST(req: Request) {
         side,
         type,
         quantity: amount,
-        price: order.price ?? price ?? 0,
+        price: (order.price && order.price > 0) ? order.price : (price ?? 0),
         orderId: order.id,
         status: order.status,
       },

@@ -73,8 +73,10 @@ function removeClientFromCandles(client: Client) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+const MAX_SUBSCRIPTIONS_PER_CLIENT = 20;
+
 export function createWebSocketServer(port: number) {
-  const wss = new WebSocketServer({ port });
+  const wss = new WebSocketServer({ port, maxPayload: 64 * 1024 }); // 64KB max message
 
   wss.on('connection', (ws) => {
     const client: Client = { ws, subscriptions: new Set() };
@@ -113,10 +115,18 @@ export function createWebSocketServer(port: number) {
 
 function handleMessage(client: Client, msg: WsMessage) {
   if (msg.type === 'subscribe') {
+    // Validate required fields
+    if (!msg.symbol || !msg.channel) return;
+
+    // Enforce per-client subscription limit
+    if (client.subscriptions.size >= MAX_SUBSCRIPTIONS_PER_CLIENT) return;
+
     if (msg.channel === 'candle' && msg.timeframe) {
+      if (!msg.exchangeId) return; // exchangeId required for candle subscriptions
       const key = `${msg.exchangeId}:${msg.symbol}:${msg.timeframe}`;
       if (!candleSubscribers.has(key)) candleSubscribers.set(key, new Set());
       candleSubscribers.get(key)!.add(client);
+      client.subscriptions.add(`candle:${key}`);
       startCandleWatcher(key);
     } else {
       client.subscriptions.add(`${msg.channel}:${msg.symbol}`);

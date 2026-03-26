@@ -60,9 +60,24 @@ async function resumeRunningStrategies() {
         await startStrategy(s.id);
         console.log(`[boot] ✓ Resumed: ${s.name} (${s.symbol})`);
         strategyCache.set(s.id, { name: s.name, symbol: s.symbol });
+        // Clear retry counter on successful resume
+        const cfg = JSON.parse(s.config || '{}');
+        if (cfg._resumeFailCount) {
+          delete cfg._resumeFailCount;
+          await prisma.strategy.update({ where: { id: s.id }, data: { config: JSON.stringify(cfg) } }).catch(() => {});
+        }
       } catch (err) {
         console.error(`[boot] ✗ Failed to resume: ${s.name} — ${err}`);
-        // Keep status as 'running' so next restart will retry (don't mark as error)
+        // Track resume failures in config — mark as error after 3 consecutive failures
+        const config = JSON.parse(s.config || '{}');
+        const retryCount = (config._resumeFailCount ?? 0) + 1;
+        config._resumeFailCount = retryCount;
+        if (retryCount >= 3) {
+          await prisma.strategy.update({ where: { id: s.id }, data: { status: 'error', config: JSON.stringify(config) } }).catch(() => {});
+          console.error(`[boot] ✗ ${s.name} failed ${retryCount} consecutive resume(s) — marking as error`);
+        } else {
+          await prisma.strategy.update({ where: { id: s.id }, data: { config: JSON.stringify(config) } }).catch(() => {});
+        }
       }
     }
 

@@ -17,7 +17,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     const { id } = await params;
     const body = await req.json();
-    const allowed = ['name', 'config', 'status', 'timeframe', 'symbol'];
+    const allowed = ['name', 'config', 'timeframe', 'symbol']; // status must be changed via start/stop endpoints
     const data: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in body) data[key] = key === 'config' ? JSON.stringify(body[key]) : body[key];
@@ -36,10 +36,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const { stopStrategy } = await import('@/lib/strategies/StrategyRunner');
     await stopStrategy(id).catch(() => {});
 
-    // Delete related records first (FK constraints)
-    await prisma.backtestResult.deleteMany({ where: { strategyId: id } });
-    await prisma.trade.updateMany({ where: { strategyId: id }, data: { strategyId: null } });
-    await prisma.strategy.delete({ where: { id } });
+    // Delete related records in a transaction (FK constraints)
+    await prisma.$transaction([
+      prisma.backtestResult.deleteMany({ where: { strategyId: id } }),
+      prisma.trade.updateMany({ where: { strategyId: id }, data: { strategyId: null } }),
+      prisma.strategy.delete({ where: { id } }),
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (err) {

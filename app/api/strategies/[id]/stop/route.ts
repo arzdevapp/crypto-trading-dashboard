@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { prisma as db } from '@/lib/db';
 import { stopStrategy } from '@/lib/strategies/StrategyRunner';
 

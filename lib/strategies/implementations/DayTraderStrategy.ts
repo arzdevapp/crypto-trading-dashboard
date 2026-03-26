@@ -88,10 +88,11 @@ const quantity = getAtrBasedQuantity({
       // 1. Hard stop loss
       if (currentPrice <= this.state.stopLossPrice) {
         const loss = ((currentPrice - this.state.entryPrice) / this.state.entryPrice * 100).toFixed(2);
+        const qty = this.state.quantity || quantity;
         this.resetPosition();
         return {
           action: 'sell',
-          quantity: this.state.quantity || quantity,
+          quantity: qty,
           price: currentPrice,
           reason: `Stop loss hit at ${currentPrice.toFixed(4)} (${loss}%)`,
         };
@@ -217,5 +218,20 @@ if (!bullish) {
 
   getState(): DayTraderState {
     return { ...this.state };
+  }
+
+  restoreState(state: Record<string, unknown>): void {
+    const s = state as unknown as DayTraderState;
+    if (typeof s.inPosition === 'boolean') this.state.inPosition = s.inPosition;
+    if (typeof s.entryPrice === 'number') this.state.entryPrice = s.entryPrice;
+    if (typeof s.quantity === 'number') this.state.quantity = s.quantity;
+    if (typeof s.stopLossPrice === 'number') this.state.stopLossPrice = s.stopLossPrice;
+    if (typeof s.takeProfitPrice === 'number') this.state.takeProfitPrice = s.takeProfitPrice;
+    if (typeof s.trailingActive === 'boolean') this.state.trailingActive = s.trailingActive;
+    if (typeof s.trailingPeak === 'number') this.state.trailingPeak = s.trailingPeak;
+    if (typeof s.trailingStopPrice === 'number') this.state.trailingStopPrice = s.trailingStopPrice;
+    if (typeof s.tradesThisSession === 'number') this.state.tradesThisSession = s.tradesThisSession;
+    if (typeof s.lastSignalLevel === 'number') this.state.lastSignalLevel = s.lastSignalLevel;
+    if (typeof s.sessionStartTime === 'number') this.state.sessionStartTime = s.sessionStartTime;
   }
 }

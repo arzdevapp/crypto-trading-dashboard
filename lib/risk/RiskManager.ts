@@ -27,12 +27,14 @@ export class RiskManager {
   validate(signal: Signal, portfolio: PortfolioSnapshot): ValidationResult {
     const errors: string[] = [];
 
+    // Drawdown check applies to all trade actions
+    if (portfolio.drawdownPct >= this.profile.maxDrawdownPct) {
+      errors.push(`Max drawdown (${this.profile.maxDrawdownPct}%) breached — trading halted`);
+    }
+
     if (signal.action === 'buy') {
       if (portfolio.openPositionCount >= this.profile.maxOpenPositions) {
         errors.push(`Max open positions (${this.profile.maxOpenPositions}) reached`);
-      }
-      if (portfolio.drawdownPct >= this.profile.maxDrawdownPct) {
-        errors.push(`Max drawdown (${this.profile.maxDrawdownPct}%) breached — trading halted`);
       }
       const qty = signal.quantity ?? 0;
       const price = signal.price ?? portfolio.lastPrice;
@@ -43,11 +45,15 @@ export class RiskManager {
       }
     }
 
-    const adjustedSignal: Signal = {
-      ...signal,
-      stopLoss: signal.stopLoss ?? this.computeStopLoss(signal.price ?? portfolio.lastPrice, signal.action as 'buy' | 'sell'),
-      takeProfit: signal.takeProfit ?? this.computeTakeProfit(signal.price ?? portfolio.lastPrice, signal.action as 'buy' | 'sell'),
-    };
+    // Only compute adjusted signal for actual trade actions
+    let adjustedSignal: Signal | undefined;
+    if (signal.action === 'buy' || signal.action === 'sell') {
+      adjustedSignal = {
+        ...signal,
+        stopLoss: signal.stopLoss ?? this.computeStopLoss(signal.price ?? portfolio.lastPrice, signal.action),
+        takeProfit: signal.takeProfit ?? this.computeTakeProfit(signal.price ?? portfolio.lastPrice, signal.action),
+      };
+    }
 
     return { approved: errors.length === 0, errors, adjustedSignal };
   }
