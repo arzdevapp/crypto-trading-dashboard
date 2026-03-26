@@ -1,6 +1,9 @@
 import { BaseStrategy } from '../BaseStrategy';
 import type { Signal } from '@/types/strategy';
 import type { OHLCVCandle } from '@/types/exchange';
+import { getAtrBasedQuantity } from '../helpers/atrSizing';
+import { isBullishTrend } from '../helpers/maCrossover';
+import { applyFees } from '../helpers/feeModel';
 
 export interface DayTraderState {
   inPosition: boolean;
@@ -45,7 +48,16 @@ export class DayTraderStrategy extends BaseStrategy {
     const cfg = this.config as Record<string, unknown>;
 
     // Config params
-    const quantity        = cfg.quantity        as number ?? 0.001;
+    // Dynamic ATR‑based quantity
+const accountEquity = cfg.accountEquity as number ?? 1000;
+const riskPct = cfg.riskPct as number ?? 1;
+const atrWindow = cfg.atrWindow as number ?? 14;
+const quantity = getAtrBasedQuantity({
+  candles,
+  accountEquity,
+  riskPct,
+  atrWindow,
+});
     const stopLossPct     = cfg.stopLossPct     as number ?? 1.0;   // % below entry
     const takeProfitPct   = cfg.takeProfitPct   as number ?? 0.8;   // % above entry
     const trailingGapPct  = cfg.trailingGapPct  as number ?? 0.3;   // trailing gap after TP
@@ -146,13 +158,20 @@ export class DayTraderStrategy extends BaseStrategy {
       return { action: 'hold', reason: `Short signal active (${neuralShort}) — skip entry` };
     }
 
-    // Neural entry
+    // Neural entry with trend filter
+const shortMaPeriod = cfg.shortMaPeriod as number ?? 5;
+const longMaPeriod = cfg.longMaPeriod as number ?? 20;
+const bullish = isBullishTrend(candles, shortMaPeriod, longMaPeriod);
+if (!bullish) {
+  return { action: 'hold', reason: 'Trend filter: not bullish' };
+}
     if (neuralLong >= entrySignalMin) {
-      const sl = currentPrice * (1 - stopLossPct / 100);
-      const tp = currentPrice * (1 + takeProfitPct / 100);
+      const entryPrice = applyFees(currentPrice, (cfg.feePct as number) ?? 0.08, (cfg.slippagePct as number) ?? 0.02, 'buy');
+      const sl = entryPrice * (1 - stopLossPct / 100);
+      const tp = entryPrice * (1 + takeProfitPct / 100);
 
       this.state.inPosition = true;
-      this.state.entryPrice = currentPrice;
+      this.state.entryPrice = entryPrice;
       this.state.quantity = quantity;
       this.state.stopLossPrice = sl;
       this.state.takeProfitPrice = tp;
@@ -165,7 +184,7 @@ export class DayTraderStrategy extends BaseStrategy {
       return {
         action: 'buy',
         quantity,
-        price: currentPrice,
+        price: entryPrice,
         reason: `Day trade entry: neural=${neuralLong}, news=${newsSentimentLabel} | SL=${sl.toFixed(4)} TP=${tp.toFixed(4)} | trade ${this.state.tradesThisSession}/${maxTradesPerDay}`,
       };
     }
