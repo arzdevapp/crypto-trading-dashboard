@@ -97,6 +97,13 @@ export async function POST(req: NextRequest) {
 
   try {
     if (action === 'start') {
+      // Validate configuration: ensure there is a quantity or budget
+      const qty = Number(config.quantity);
+      const budget = Number(config.investmentPerTrade);
+      if ((isNaN(qty) || qty <= 0) && (isNaN(budget) || budget <= 0)) {
+        return NextResponse.json({ error: 'Order size or Total budget must be greater than 0' }, { status: 400 });
+      }
+
       // Upsert the strategy record
       let strategy = await prisma.strategy.findFirst({
         where: { exchangeId, symbol, type: 'POWER_TRADER' },

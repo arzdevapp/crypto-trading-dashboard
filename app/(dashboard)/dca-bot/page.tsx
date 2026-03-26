@@ -120,6 +120,11 @@ export default function DCABotPage() {
   const [baselineAtrPct, setBaselineAtrPct] = useState('2.0');
   const [filterMacroTrend, setFilterMacroTrend] = useState(false);
   const [macroTimeframe, setMacroTimeframe] = useState('4h');
+  const [feePct, setFeePct] = useState('0.1');
+  const [slippagePct, setSlippagePct] = useState('0.1');
+  const [filterMaTrend, setFilterMaTrend] = useState(false);
+  const [shortMaPeriod, setShortMaPeriod] = useState('5');
+  const [longMaPeriod, setLongMaPeriod] = useState('20');
   const isShort = side === 'short';
   const queryClient = useQueryClient();
 
@@ -237,6 +242,11 @@ export default function DCABotPage() {
             baselineAtrPct: Number(baselineAtrPct),
             filterMacroTrend,
             macroTimeframe: filterMacroTrend ? macroTimeframe : undefined,
+            feePct: Number(feePct),
+            slippagePct: Number(slippagePct),
+            filterMaTrend,
+            shortMaPeriod: Number(shortMaPeriod),
+            longMaPeriod: Number(longMaPeriod),
           },
         }),
       });
@@ -626,6 +636,40 @@ export default function DCABotPage() {
               </div>
             </div>
 
+            {/* MA Trend Filter */}
+            <div className="space-y-2 pt-2 mt-4 border-t" style={{ borderColor: '#1a2538' }}>
+              <div className="flex items-center justify-between">
+                <div 
+                  className="flex items-center gap-2 cursor-pointer" 
+                  onClick={() => !running && setFilterMaTrend(!filterMaTrend)}
+                >
+                  <div className={`w-3 h-3 rounded-full flex-shrink-0 border flex items-center justify-center ${filterMaTrend ? 'bg-[#00E5FF] border-[#00E5FF]' : 'border-[#4b5563] bg-transparent'}`}>
+                    {filterMaTrend && <div className="w-1.5 h-1.5 bg-[#070B10] rounded-full" />}
+                  </div>
+                  <Label className="text-[10px] font-mono cursor-pointer" style={{ color: '#9ca3af' }}>MA Trend Filter</Label>
+                </div>
+                {filterMaTrend && (
+                  <div className="flex items-center gap-1.5">
+                    <Input className="h-6 w-9 text-[10px] font-mono px-1 py-0 text-center" value={shortMaPeriod} onChange={e => setShortMaPeriod(e.target.value)} disabled={running} />
+                    <span className="text-[9px] font-mono" style={{ color: '#6b7280' }}>/</span>
+                    <Input className="h-6 w-9 text-[10px] font-mono px-1 py-0 text-center" value={longMaPeriod} onChange={e => setLongMaPeriod(e.target.value)} disabled={running} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Fees */}
+            <div className="space-y-2 pt-2 mt-4 border-t" style={{ borderColor: '#1a2538' }}>
+              <div className="flex items-center justify-between">
+                 <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Exchange Fee (%)</Label>
+                 <Input className="h-6 w-14 text-[10px] font-mono px-1 py-0 text-center" type="number" step="0.01" value={feePct} onChange={e => setFeePct(e.target.value)} disabled={running} />
+              </div>
+              <div className="flex items-center justify-between">
+                 <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Slippage (%)</Label>
+                 <Input className="h-6 w-14 text-[10px] font-mono px-1 py-0 text-center" type="number" step="0.01" value={slippagePct} onChange={e => setSlippagePct(e.target.value)} disabled={running} />
+              </div>
+            </div>
+
             {/* Macro Trend Filter */}
             <div className="space-y-2 pt-2 mt-4 border-t" style={{ borderColor: '#1a2538' }}>
               <div className="flex items-center justify-between">
@@ -772,9 +816,13 @@ export default function DCABotPage() {
           ) : (
             <Button
               className="w-full h-9 font-mono text-xs font-bold gap-2"
-              style={{ background: '#00FF6620', color: '#00FF66', border: '1px solid #00FF6640' }}
+              style={{ 
+                background: starting || training || (!parseFloat(quantity) && !parseFloat(usdtInput)) ? '#1a2538' : '#00FF6620', 
+                color: starting || training || (!parseFloat(quantity) && !parseFloat(usdtInput)) ? '#4b5563' : '#00FF66', 
+                border: starting || training || (!parseFloat(quantity) && !parseFloat(usdtInput)) ? '1px solid #243044' : '1px solid #00FF6640' 
+              }}
               onClick={() => startBot()}
-              disabled={starting || training}
+              disabled={starting || training || (!parseFloat(quantity) && !parseFloat(usdtInput))}
             >
               {starting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
               {starting ? 'STARTING…' : 'START BOT'}

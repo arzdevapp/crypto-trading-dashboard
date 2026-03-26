@@ -2,6 +2,8 @@ import { BaseStrategy } from '../BaseStrategy';
 import type { Signal, StrategyConfig } from '@/types/strategy';
 import type { OHLCVCandle } from '@/types/exchange';
 import { atr } from '../indicators/atr';
+import { applyFees } from '../helpers/feeModel';
+import { isBullishTrend } from '../helpers/maCrossover';
 
 export interface DCALevel {
   neuralTrigger: number;   // signal level threshold
@@ -99,6 +101,28 @@ export class PowerTraderStrategy extends BaseStrategy {
     const effectiveStartLevel = Math.max(1, tradeStartLevel + newsAdjustment);
 
     const currentPrice = candles[candles.length - 1].close;
+
+    // Fees and Slippage extraction
+    const feePct = cfg.feePct as number ?? 0.1;
+    const slippagePct = cfg.slippagePct as number ?? 0.05;
+
+    // Moving Average Trend Filter
+    const filterMaTrend = cfg.filterMaTrend as boolean ?? false;
+    let passesMaFilter = true;
+    let maReason = '';
+
+    if (filterMaTrend && candles.length >= (cfg.longMaPeriod as number ?? 20)) {
+      const shortMaPeriod = cfg.shortMaPeriod as number ?? 5;
+      const longMaPeriod = cfg.longMaPeriod as number ?? 20;
+      const bullish = isBullishTrend(candles, shortMaPeriod, longMaPeriod);
+      if (isShort && bullish) {
+        passesMaFilter = false;
+        maReason = `MA Trend: Bullish (${shortMaPeriod}/${longMaPeriod}) — blocks short entry`;
+      } else if (!isShort && !bullish) {
+        passesMaFilter = false;
+        maReason = `MA Trend: Bearish (${shortMaPeriod}/${longMaPeriod}) — blocks long entry`;
+      }
+    }
 
     // Base quantity calculation
     let baseQuantity = legacyQuantity;
@@ -248,13 +272,19 @@ export class PowerTraderStrategy extends BaseStrategy {
       }
     }
 
+    // === HARD BLOCK: MA Trend Filter ===
+    if (!this.state.inPosition && !passesMaFilter) {
+      return { action: 'hold', reason: maReason };
+    }
+
     // === ENTRY LOGIC ===
     if (!this.state.inPosition) {
       if (isShort) {
         // Short entry: neural short signal fires, no conflicting long
         if (neuralShortLevel >= effectiveStartLevel && neuralLongLevel === 0) {
+          const entryPrice = applyFees(currentPrice, feePct, slippagePct, 'sell');
           this.state.inPosition = true;
-          this.state.avgCostBasis = currentPrice;
+          this.state.avgCostBasis = entryPrice;
           this.state.positionSize = baseQuantity;
           this.state.dcaStage = 0;
           this.state.dcaCount = 0;
@@ -265,15 +295,16 @@ export class PowerTraderStrategy extends BaseStrategy {
             action: 'sell',
             quantity: baseQuantity,
             price: currentPrice,
-            reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog}`,
+            reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost basis: ${entryPrice.toFixed(4)})`,
           };
         }
         return { action: 'hold', reason: `Waiting: neural short=${neuralShortLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
       } else {
         // Long entry: neural long signal fires, no conflicting short
         if (neuralLongLevel >= effectiveStartLevel && neuralShortLevel === 0) {
+          const entryPrice = applyFees(currentPrice, feePct, slippagePct, 'buy');
           this.state.inPosition = true;
-          this.state.avgCostBasis = currentPrice;
+          this.state.avgCostBasis = entryPrice;
           this.state.positionSize = baseQuantity;
           this.state.dcaStage = 0;
           this.state.dcaCount = 0;
@@ -284,7 +315,7 @@ export class PowerTraderStrategy extends BaseStrategy {
             action: 'buy',
             quantity: baseQuantity,
             price: currentPrice,
-            reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog}`,
+            reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost basis: ${entryPrice.toFixed(4)})`,
           };
         }
         return { action: 'hold', reason: `Waiting: neural=${neuralLongLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
@@ -324,12 +355,13 @@ export class PowerTraderStrategy extends BaseStrategy {
         }
 
         const triggerSignalLevel = isShort ? neuralShortLevel : neuralLongLevel;
+        const entryPrice = applyFees(currentPrice, feePct, slippagePct, isShort ? 'sell' : 'buy');
         const reason = neuralTriggered
-          ? `DCA stage ${this.state.dcaStage + 1}: neural level ${triggerSignalLevel}`
-          : `DCA stage ${this.state.dcaStage + 1}: ${rawPctChange.toFixed(1)}% ${isShort ? 'adverse rise' : 'drawdown'}`;
+          ? `DCA stage ${this.state.dcaStage + 1}: neural level ${triggerSignalLevel} (Cost: ${entryPrice.toFixed(4)})`
+          : `DCA stage ${this.state.dcaStage + 1}: ${rawPctChange.toFixed(1)}% ${isShort ? 'adverse rise' : 'drawdown'} (Cost: ${entryPrice.toFixed(4)})`;
 
         // Update avg cost basis
-        const totalCost = this.state.avgCostBasis * this.state.positionSize + currentPrice * dcaQty;
+        const totalCost = this.state.avgCostBasis * this.state.positionSize + entryPrice * dcaQty;
         this.state.positionSize += dcaQty;
         this.state.avgCostBasis = totalCost / this.state.positionSize;
         this.state.dcaStage++;
