@@ -123,10 +123,13 @@ export async function POST(req: NextRequest) {
           },
         });
       } else {
-        // Update config with latest settings, reset status in case it was in error
+        // Merge new config with existing — preserve internal fields like _savedState, _neuralLongLevel, etc.
+        const existingConfig = JSON.parse(strategy.config || '{}');
+        const internalKeys = Object.keys(existingConfig).filter(k => k.startsWith('_'));
+        const preserved = Object.fromEntries(internalKeys.map(k => [k, existingConfig[k]]));
         strategy = await prisma.strategy.update({
           where: { id: strategy.id },
-          data: { config: JSON.stringify(config), timeframe, status: 'stopped' },
+          data: { config: JSON.stringify({ ...config, ...preserved }), timeframe, status: 'stopped' },
         });
       }
 

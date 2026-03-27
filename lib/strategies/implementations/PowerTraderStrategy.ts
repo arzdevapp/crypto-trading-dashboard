@@ -286,8 +286,8 @@ export class PowerTraderStrategy extends BaseStrategy {
     // === ENTRY LOGIC ===
     if (!this.state.inPosition) {
       if (isShort) {
-        // Short entry: neural short signal fires, no conflicting long
-        if (neuralShortLevel >= effectiveStartLevel && neuralLongLevel === 0) {
+        // Short entry: short signal dominates — allow weak opposing signal (< half the short level)
+        if (neuralShortLevel >= effectiveStartLevel && neuralLongLevel < neuralShortLevel) {
           const entryFee = (currentPrice * baseQuantity) * (feePct / 100);
           this.state.inPosition = true;
           this.state.avgCostBasis = currentPrice;
@@ -305,10 +305,10 @@ export class PowerTraderStrategy extends BaseStrategy {
             reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost: ${currentPrice.toFixed(4)})`,
           };
         }
-        return { action: 'hold', reason: `Waiting: neural short=${neuralShortLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
+        return { action: 'hold', reason: `Waiting: neural short=${neuralShortLevel} need ${effectiveStartLevel}${neuralShortLevel >= effectiveStartLevel ? ` (blocked: long signal ${neuralLongLevel} >= short signal)` : ''}, news=${newsSentimentLabel}` };
       } else {
-        // Long entry: neural long signal fires, no conflicting short
-        if (neuralLongLevel >= effectiveStartLevel && neuralShortLevel === 0) {
+        // Long entry: long signal dominates — allow weak opposing signal (< the long level)
+        if (neuralLongLevel >= effectiveStartLevel && neuralShortLevel < neuralLongLevel) {
           const entryFee = (currentPrice * baseQuantity) * (feePct / 100);
           this.state.inPosition = true;
           this.state.avgCostBasis = currentPrice;
@@ -326,7 +326,7 @@ export class PowerTraderStrategy extends BaseStrategy {
             reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost: ${currentPrice.toFixed(4)})`,
           };
         }
-        return { action: 'hold', reason: `Waiting: neural=${neuralLongLevel} need ${effectiveStartLevel}, news=${newsSentimentLabel}` };
+        return { action: 'hold', reason: `Waiting: neural=${neuralLongLevel} need ${effectiveStartLevel}${neuralLongLevel >= effectiveStartLevel ? ` (blocked: short signal ${neuralShortLevel} >= long signal)` : ''}, news=${newsSentimentLabel}` };
       }
     }
 
