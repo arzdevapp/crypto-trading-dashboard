@@ -66,9 +66,11 @@ export function predictNextLevels(
 
   for (let i = 0; i < memory.patterns.length; i++) {
     const p = memory.patterns[i];
-    const avg = (Math.abs(currentPctChange) + Math.abs(p.pctChange)) / 2;
-    if (avg === 0) continue;
-    const difference = (Math.abs(currentPctChange - p.pctChange) / avg) * 100;
+    // Absolute % difference: "moved by ~X%" matching, not relative ratio.
+    // Relative comparison (old code) made a 0.5% candle only match 0.495-0.505%
+    // candles — almost never finding any patterns. Absolute threshold=1.0 means
+    // "any candle within 1% of the current move is a similar candle."
+    const difference = Math.abs(currentPctChange - p.pctChange);
 
     if (difference <= memory.perfectThreshold) {
       moves.push(p.pctChange * memory.weights[i]);

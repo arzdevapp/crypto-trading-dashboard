@@ -137,8 +137,10 @@ export async function startStrategy(strategyId: string): Promise<void> {
         try {
           const predictor = await getPredictor(record.symbol);
           const ticker = await adapter.fetchTicker(record.symbol);
-          const candles1h = record.timeframe === '1h' ? candles : await adapter.fetchOHLCV(record.symbol, '1h', 3);
-          const signals = predictor.aggregateSignals(candles1h, ticker.last);
+          // Always fetch a fresh 1h candle for the predictor — it only uses the last candle's
+          // open/close % change to find matching patterns, so we need the most recent complete candle.
+          const predCandles = await adapter.fetchOHLCV(record.symbol, '1h', 2);
+          const signals = predictor.aggregateSignals(predCandles, ticker.last);
           (strategy as unknown as NeuralAwareStrategy).setNeuralLevels(signals.maxLongSignal, signals.maxShortSignal);
         } catch { /* non-fatal — strategy keeps last known levels */ }
 

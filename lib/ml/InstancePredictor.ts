@@ -84,8 +84,10 @@ export class InstancePredictor {
     const longLevels = enforceGapSpacing(rawLongLevels.filter(p => p < currentPrice));
     const shortLevels = enforceGapSpacing(rawShortLevels.filter(p => p > currentPrice));
 
-    const longSignalCount = longLevels.filter(l => currentPrice <= l * 1.001).length;
-    const shortSignalCount = shortLevels.filter(s => currentPrice >= s * 0.999).length;
+    // 1% proximity band: count support levels within 1% below current price (was 0.1% — too tight)
+    const longSignalCount = longLevels.filter(l => currentPrice <= l * 1.01).length;
+    // 1% proximity band: count resistance levels within 1% above current price
+    const shortSignalCount = shortLevels.filter(s => currentPrice >= s * 0.99).length;
 
     return { longLevels, shortLevels, longSignalCount, shortSignalCount, predictedHigh, predictedLow };
   }
