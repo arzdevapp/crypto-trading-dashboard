@@ -108,7 +108,7 @@ export async function startStrategy(strategyId: string): Promise<void> {
   await log('info', `strategy:${strategyId}`, `Strategy started: ${record.name}`, { type: record.type, symbol: record.symbol, timeframe: record.timeframe });
 
   const intervalMs = getIntervalMs(record.timeframe);
-  const interval = setInterval(async () => {
+  const runTick = async () => {
     const runner = runners.get(strategyId);
     if (!runner) return; // Runner was stopped/deleted — bail out
     try {
@@ -370,7 +370,12 @@ export async function startStrategy(strategyId: string): Promise<void> {
       statusCallback?.(strategyId, 'error', undefined, error.message);
       await log('error', `strategy:${strategyId}`, `Strategy error: ${error.message}`, { strategyId });
     }
-  }, intervalMs);
+  };
+
+  const interval = setInterval(runTick, intervalMs);
+  
+  // Also run the tick immediately upon starting
+  void runTick();
 
   runners.set(strategyId, { strategyId, interval, status: 'running', strategy });
 }
