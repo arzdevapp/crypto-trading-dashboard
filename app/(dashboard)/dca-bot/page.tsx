@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, startTransition } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PriceChart } from '@/components/charts/PriceChart';
 import { NeuralLevelsOverlay } from '@/components/charts/NeuralLevelsOverlay';
@@ -121,7 +121,6 @@ export default function DCABotPage() {
   const [filterMacroTrend, setFilterMacroTrend] = useState(false);
   const [macroTimeframe, setMacroTimeframe] = useState('4h');
   const [feePct, setFeePct] = useState('0.1');
-  const [slippagePct, setSlippagePct] = useState('0.1');
   const [filterMaTrend, setFilterMaTrend] = useState(false);
   const [shortMaPeriod, setShortMaPeriod] = useState('5');
   const [longMaPeriod, setLongMaPeriod] = useState('20');
@@ -151,6 +150,40 @@ export default function DCABotPage() {
     staleTime: 4000,
     throwOnError: false,
   });
+
+  // Pre-populate form from running bot config (once per symbol, so user edits aren't clobbered)
+  const configLoadedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    const cfg = botStatus?.strategy?.config;
+    if (!cfg || configLoadedForRef.current === selectedSymbol) return;
+    configLoadedForRef.current = selectedSymbol;
+    const timeframeVal = botStatus?.strategy?.timeframe;
+    startTransition(() => {
+      if (cfg.side) setSide(cfg.side as 'long' | 'short');
+      if (cfg.tradeStartLevel != null) setTradeStartLevel(String(cfg.tradeStartLevel));
+      if (cfg.pmStartPct != null) setPmStartPct(String(cfg.pmStartPct));
+      if (cfg.maxDrawdownPct != null) setMaxDrawdownPct(String(cfg.maxDrawdownPct));
+      if (cfg.dailyLossLimit != null) setDailyLossLimit(String(cfg.dailyLossLimit));
+      if (cfg.feePct != null) setFeePct(String(cfg.feePct));
+      if (cfg.useAtrSizing != null) setUseAtrSizing(Boolean(cfg.useAtrSizing));
+      if (cfg.baselineAtrPct != null) setBaselineAtrPct(String(cfg.baselineAtrPct));
+      if (cfg.filterMaTrend != null) setFilterMaTrend(Boolean(cfg.filterMaTrend));
+      if (cfg.shortMaPeriod != null) setShortMaPeriod(String(cfg.shortMaPeriod));
+      if (cfg.longMaPeriod != null) setLongMaPeriod(String(cfg.longMaPeriod));
+      if (cfg.filterMacroTrend != null) setFilterMacroTrend(Boolean(cfg.filterMacroTrend));
+      if (cfg.macroTimeframe) setMacroTimeframe(String(cfg.macroTimeframe));
+      if (timeframeVal) setTimeframe(timeframeVal);
+      // Derive USDT input from investmentPerTrade (stored as per-DCA, UI shows total = 7x)
+      if (cfg.investmentPerTrade != null && Number(cfg.investmentPerTrade) > 0) {
+        setUsdtInput(String(Number(cfg.investmentPerTrade) * 7));
+      } else if (cfg.quantity != null) {
+        setQuantity(String(cfg.quantity));
+      }
+    });
+  }, [botStatus, selectedSymbol]);
+
+  // Reset loaded ref when symbol changes so new symbol loads its own config
+  useEffect(() => { configLoadedForRef.current = null; }, [selectedSymbol]);
 
   // Show error toast when API fails
   useEffect(() => {
@@ -243,7 +276,6 @@ export default function DCABotPage() {
             filterMacroTrend,
             macroTimeframe: filterMacroTrend ? macroTimeframe : undefined,
             feePct: Number(feePct),
-            slippagePct: Number(slippagePct),
             filterMaTrend,
             shortMaPeriod: Number(shortMaPeriod),
             longMaPeriod: Number(longMaPeriod),
@@ -663,10 +695,6 @@ export default function DCABotPage() {
               <div className="flex items-center justify-between">
                  <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Exchange Fee (%)</Label>
                  <Input className="h-6 w-14 text-[10px] font-mono px-1 py-0 text-center" type="number" step="0.01" value={feePct} onChange={e => setFeePct(e.target.value)} disabled={running} />
-              </div>
-              <div className="flex items-center justify-between">
-                 <Label className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>Slippage (%)</Label>
-                 <Input className="h-6 w-14 text-[10px] font-mono px-1 py-0 text-center" type="number" step="0.01" value={slippagePct} onChange={e => setSlippagePct(e.target.value)} disabled={running} />
               </div>
             </div>
 
