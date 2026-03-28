@@ -28,7 +28,7 @@ export default function DashboardPage() {
 
   // Mobile layout — stacked, scrollable, no resize handles
   const mobileLayout = (
-    <div className="flex flex-col gap-2 p-2 overflow-y-auto h-full xl:hidden">
+    <div className="flex flex-col gap-2 p-2 xl:hidden">
       {/* Chart first on mobile */}
       <div className="flex items-center gap-2 flex-shrink-0">
         <SymbolSearch />
@@ -137,7 +137,7 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#070B10' }}>
+    <div className="flex flex-col xl:h-full" style={{ background: '#070B10' }}>
       {/* Live ticker bar */}
       <div className="flex items-center flex-shrink-0">
         <div className="flex-1 min-w-0"><TickerBar /></div>
