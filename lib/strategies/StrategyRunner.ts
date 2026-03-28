@@ -130,7 +130,10 @@ export async function startStrategy(strategyId: string): Promise<void> {
       }
 
       const candles = await adapter.fetchOHLCV(record.symbol, record.timeframe, 2);
-      if (!candles.length) return;
+      if (!candles.length) {
+        await log('error', `strategy:${strategyId}`, `No candles returned for ${record.symbol} ${record.timeframe} - adapter may be broken`);
+        return;
+      }
 
       // Inject live neural signals + news sentiment into PowerTrader / DayTrader before each candle
       if (record.type === 'POWER_TRADER' || record.type === 'DAY_TRADER') {
@@ -374,12 +377,12 @@ export async function startStrategy(strategyId: string): Promise<void> {
     }
   };
 
+  // Add runner to map BEFORE scheduling the first tick
   const interval = setInterval(runTick, intervalMs);
+  runners.set(strategyId, { strategyId, interval, status: 'running', strategy });
   
   // Also run the tick immediately upon starting
   void runTick();
-
-  runners.set(strategyId, { strategyId, interval, status: 'running', strategy });
 }
 
 export async function stopStrategy(strategyId: string): Promise<void> {
