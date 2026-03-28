@@ -29,12 +29,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 }
 
+const CONTROL_BASE = `http://127.0.0.1:${process.env.CONTROL_PORT ?? '8081'}`;
+
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    // Stop runner if active
-    const { stopStrategy } = await import('@/lib/strategies/StrategyRunner');
-    await stopStrategy(id).catch(() => {});
+    // Stop runner in sidecar if active (strategies run in sidecar, not Next.js process)
+    await fetch(`${CONTROL_BASE}/strategy/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ strategyId: id }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => {}); // non-fatal — sidecar may not be running
 
     // Delete related records in a transaction (FK constraints)
     await prisma.$transaction([
