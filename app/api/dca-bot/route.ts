@@ -199,6 +199,7 @@ export async function GET(req: NextRequest) {
       currentPrice,
     });
   } catch (err) {
+    console.error('[GET /api/dca-bot] 500 error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
@@ -271,6 +272,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (err) {
+    console.error('[POST /api/dca-bot] 500 error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
