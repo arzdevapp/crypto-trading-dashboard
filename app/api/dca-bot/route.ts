@@ -12,13 +12,17 @@ const CONTROL_BASE = `http://127.0.0.1:${process.env.CONTROL_PORT ?? '8081'}`;
 interface RunnerInfo { running: boolean; lastSignal: unknown; error: string | null; powerState: unknown }
 
 async function controlPost(path: string, body: Record<string, string>): Promise<{ ok?: boolean; error?: string }> {
-  const res = await fetch(`${CONTROL_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(5000),
-  });
-  return res.json() as Promise<{ ok?: boolean; error?: string }>;
+  try {
+    const res = await fetch(`${CONTROL_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.json() as Promise<{ ok?: boolean; error?: string }>;
+  } catch {
+    return { error: 'Sidecar not reachable — is the server running? (npm run dev:server)' };
+  }
 }
 
 async function controlGet(path: string): Promise<RunnerInfo | RunnerInfo[] | null> {
@@ -195,7 +199,7 @@ export async function GET(req: NextRequest) {
       currentPrice,
     });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
 
@@ -267,6 +271,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }

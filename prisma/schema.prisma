@@ -19,66 +19,66 @@ model ExchangeConfig {
 }
 
 model Strategy {
-  id         String          @id @default(cuid())
+  id         String           @id @default(cuid())
   name       String
   type       String
   symbol     String
   timeframe  String
   config     String
-  status     String          @default("stopped")
+  status     String           @default("stopped")
   exchangeId String
-  exchange   ExchangeConfig  @relation(fields: [exchangeId], references: [id])
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  trades     Trade[]
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
   backtests  BacktestResult[]
+  exchange   ExchangeConfig   @relation(fields: [exchangeId], references: [id])
+  trades     Trade[]
 }
 
 model Trade {
-  id         String          @id @default(cuid())
+  id         String         @id @default(cuid())
   exchangeId String
-  exchange   ExchangeConfig  @relation(fields: [exchangeId], references: [id])
   strategyId String?
-  strategy   Strategy?       @relation(fields: [strategyId], references: [id])
   symbol     String
   side       String
   type       String
   quantity   Float
   price      Float
-  fee        Float           @default(0)
+  fee        Float          @default(0)
   pnl        Float?
   orderId    String
   status     String
-  openedAt   DateTime        @default(now())
+  openedAt   DateTime       @default(now())
   closedAt   DateTime?
+  strategy   Strategy?      @relation(fields: [strategyId], references: [id])
+  exchange   ExchangeConfig @relation(fields: [exchangeId], references: [id])
 }
 
 model BacktestResult {
-  id               String    @id @default(cuid())
-  strategyId       String
-  strategy         Strategy  @relation(fields: [strategyId], references: [id])
-  symbol           String
-  timeframe        String
-  startDate        DateTime
-  endDate          DateTime
-  initialCapital   Float
-  finalCapital     Float
-  totalTrades      Int
-  winRate          Float
-  sharpeRatio      Float
-  maxDrawdown      Float
-  profitFactor     Float
-  tradesJson       String
-  equityCurveJson  String
-  createdAt        DateTime  @default(now())
+  id              String   @id @default(cuid())
+  strategyId      String
+  symbol          String
+  timeframe       String
+  startDate       DateTime
+  endDate         DateTime
+  initialCapital  Float
+  finalCapital    Float
+  totalTrades     Int
+  winRate         Float
+  sharpeRatio     Float
+  maxDrawdown     Float
+  profitFactor    Float
+  tradesJson      String
+  equityCurveJson String
+  createdAt       DateTime @default(now())
+  strategy        Strategy @relation(fields: [strategyId], references: [id])
 }
 
 model SystemLog {
   id        String   @id @default(cuid())
-  level     String   // info | warn | error | trade | signal
-  source    String   // e.g. "strategy:abc123", "ml:train", "order:place"
+  level     String
+  source    String
   message   String
-  meta      String?  // JSON stringified extra context
+  meta      String?
   createdAt DateTime @default(now())
 
   @@index([level])
@@ -89,7 +89,7 @@ model ModelMemory {
   id          String   @id @default(cuid())
   symbol      String
   timeframe   String
-  memoryJson  String   // JSON stringified PatternMemory
+  memoryJson  String
   candleCount Int
   trainedAt   DateTime @default(now())
 
@@ -97,10 +97,10 @@ model ModelMemory {
 }
 
 model RiskProfile {
-  id                   String  @id @default(cuid())
-  maxPositionSizePct   Float   @default(5.0)
-  maxDrawdownPct       Float   @default(20.0)
-  defaultStopLossPct   Float   @default(2.0)
-  defaultTakeProfitPct Float   @default(4.0)
-  maxOpenPositions     Int     @default(5)
+  id                   String @id @default(cuid())
+  maxPositionSizePct   Float  @default(5.0)
+  maxDrawdownPct       Float  @default(20.0)
+  defaultStopLossPct   Float  @default(2.0)
+  defaultTakeProfitPct Float  @default(4.0)
+  maxOpenPositions     Int    @default(5)
 }

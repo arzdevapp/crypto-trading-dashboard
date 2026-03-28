@@ -145,12 +145,18 @@ export async function startStrategy(strategyId: string): Promise<void> {
           const predCandles = await adapter.fetchOHLCV(record.symbol, '1h', 2);
           const signals = predictor.aggregateSignals(predCandles, ticker.last);
           (strategy as unknown as NeuralAwareStrategy).setNeuralLevels(signals.maxLongSignal, signals.maxShortSignal);
-        } catch { /* non-fatal — strategy keeps last known levels */ }
+          await log('info', `strategy:${strategyId}`, `Neural signals: long=${signals.maxLongSignal} short=${signals.maxShortSignal} price=${ticker.last}`, { long: signals.maxLongSignal, short: signals.maxShortSignal, price: ticker.last });
+        } catch (e) {
+          await log('warn', `strategy:${strategyId}`, `Neural signal fetch failed — keeping last known levels: ${e instanceof Error ? e.message : String(e)}`);
+        }
 
         try {
           const sentiment = await getNewsSentiment(record.symbol);
           (strategy as unknown as NeuralAwareStrategy).setNewsSentiment(sentiment.score, sentiment.label);
-        } catch { /* non-fatal */ }
+          await log('info', `strategy:${strategyId}`, `News sentiment: ${sentiment.label} (${sentiment.score.toFixed(2)})`, { score: sentiment.score, label: sentiment.label });
+        } catch (e) {
+          await log('warn', `strategy:${strategyId}`, `News sentiment fetch failed — keeping last known: ${e instanceof Error ? e.message : String(e)}`);
+        }
 
         try {
           const macroTimeframe = config.macroTimeframe as string;
@@ -165,9 +171,12 @@ export async function startStrategy(strategyId: string): Promise<void> {
               if (typeof (strategy as unknown as NeuralAwareStrategy).setMacroTrend === 'function') {
                 (strategy as unknown as NeuralAwareStrategy).setMacroTrend!(trend);
               }
+              await log('info', `strategy:${strategyId}`, `Macro trend (${macroTimeframe}): ${trend} — EMA9=${ema9[ema9.length - 1].toFixed(2)} EMA21=${ema21[ema21.length - 1].toFixed(2)}`, { trend, timeframe: macroTimeframe });
             }
           }
-        } catch { /* non-fatal */ }
+        } catch (e) {
+          await log('warn', `strategy:${strategyId}`, `Macro trend fetch failed — keeping last known: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
 
       // Snapshot state BEFORE computing the signal so we can revert if the order fails.
@@ -380,7 +389,7 @@ export async function startStrategy(strategyId: string): Promise<void> {
   // Add runner to map BEFORE scheduling the first tick
   const interval = setInterval(runTick, intervalMs);
   runners.set(strategyId, { strategyId, interval, status: 'running', strategy });
-  
+
   // Also run the tick immediately upon starting
   void runTick();
 }
