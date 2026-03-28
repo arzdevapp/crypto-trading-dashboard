@@ -1,7 +1,8 @@
 import 'dotenv/config';
+import http from 'http';
 import { createWebSocketServer } from './websocket-server';
 import { createTerminalServer } from './terminal-server';
-import { setStatusCallback, startStrategy } from '../lib/strategies/StrategyRunner';
+import { setStatusCallback, startStrategy, stopStrategy, getRunnerStatus, getStrategyInstance, getAllRunnerIds } from '../lib/strategies/StrategyRunner';
 import { prisma } from '../lib/db';
 import type { StrategyStatus } from '../types/strategy';
 import type { Signal } from '../types/strategy';
@@ -10,6 +11,7 @@ import { initTelegramBot, notifyTrade, notifyError, notifyStopped, notifyMessage
 
 const WS_PORT = parseInt(process.env.WS_PORT ?? '8080', 10);
 const TERMINAL_PORT = parseInt(process.env.TERMINAL_PORT ?? '8082', 10);
+const CONTROL_PORT = parseInt(process.env.CONTROL_PORT ?? '8081', 10);
 
 createWebSocketServer(WS_PORT);
 createTerminalServer(TERMINAL_PORT);
@@ -88,5 +90,69 @@ async function resumeRunningStrategies() {
 }
 
 resumeRunningStrategies();
+
+// ── Internal control HTTP server (localhost only) ─────────────────────────────
+// Next.js API routes delegate start/stop/status calls here so that strategies
+// always run in this stable sidecar process — never in the hot-reloading Next.js process.
+const controlServer = http.createServer(async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+
+  let body = '';
+  await new Promise<void>(resolve => { req.on('data', (c: Buffer) => { body += c.toString(); }); req.on('end', resolve); });
+  const data = body ? (JSON.parse(body) as Record<string, string>) : {};
+
+  try {
+    if (req.method === 'POST' && req.url === '/strategy/start') {
+      const { strategyId } = data;
+      if (!strategyId) { res.writeHead(400); res.end(JSON.stringify({ error: 'strategyId required' })); return; }
+      if (getRunnerStatus(strategyId)) { res.writeHead(200); res.end(JSON.stringify({ ok: true })); return; }
+      await startStrategy(strategyId);
+      const s = await prisma.strategy.findUnique({ where: { id: strategyId }, select: { name: true, symbol: true } }).catch(() => null);
+      if (s) strategyCache.set(strategyId, s);
+      res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/strategy/stop') {
+      const { strategyId } = data;
+      if (!strategyId) { res.writeHead(400); res.end(JSON.stringify({ error: 'strategyId required' })); return; }
+      await stopStrategy(strategyId);
+      res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    if (req.method === 'GET' && req.url?.startsWith('/strategy/status')) {
+      const url = new URL(req.url, `http://localhost:${CONTROL_PORT}`);
+
+      if (url.pathname === '/strategy/status/all') {
+        const all = getAllRunnerIds().map(id => {
+          const runner = getRunnerStatus(id);
+          const instance = getStrategyInstance(id);
+          const powerState = instance && 'getState' in instance ? (instance as { getState: () => unknown }).getState() : null;
+          return { strategyId: id, running: !!runner, lastSignal: runner?.lastSignal ?? null, error: runner?.error ?? null, powerState };
+        });
+        res.writeHead(200); res.end(JSON.stringify(all));
+        return;
+      }
+
+      const strategyId = url.searchParams.get('strategyId');
+      if (!strategyId) { res.writeHead(400); res.end(JSON.stringify({ error: 'strategyId required' })); return; }
+      const runner = getRunnerStatus(strategyId);
+      const instance = getStrategyInstance(strategyId);
+      const powerState = instance && 'getState' in instance ? (instance as { getState: () => unknown }).getState() : null;
+      res.writeHead(200); res.end(JSON.stringify({ running: !!runner, lastSignal: runner?.lastSignal ?? null, error: runner?.error ?? null, powerState }));
+      return;
+    }
+
+    res.writeHead(404); res.end(JSON.stringify({ error: 'Not found' }));
+  } catch (e) {
+    res.writeHead(500); res.end(JSON.stringify({ error: (e as Error).message }));
+  }
+});
+
+controlServer.listen(CONTROL_PORT, '127.0.0.1', () => {
+  console.log(`Control server running on port ${CONTROL_PORT} (localhost only)`);
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 console.log('Crypto trading bot server started');
