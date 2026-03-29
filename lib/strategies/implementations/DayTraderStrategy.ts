@@ -154,6 +154,14 @@ const quantity = getAtrBasedQuantity({
       return { action: 'hold', reason: `News block: ${newsSentimentLabel} (${newsSentiment.toFixed(2)})` };
     }
 
+    // Funding rate / OI block — overleveraged longs signal likely pullback
+    const fundingOIScore = cfg._fundingOIScore as number ?? 0;
+    const fundingOILabel = cfg._fundingOILabel as string ?? 'Neutral';
+    const fundingBlockThresh = cfg.fundingBlockThresh as number ?? -0.4;
+    if (fundingOIScore <= fundingBlockThresh) {
+      return { action: 'hold', reason: `Funding block: ${fundingOILabel} (${fundingOIScore.toFixed(2)})` };
+    }
+
     // Don't enter against short signal
     if (neuralShort >= 3) {
       return { action: 'hold', reason: `Short signal active (${neuralShort}) — skip entry` };
@@ -214,6 +222,11 @@ if (!bullish) {
   setNewsSentiment(score: number, label: string): void {
     (this.config as Record<string, unknown>)._newsSentiment = score;
     (this.config as Record<string, unknown>)._newsSentimentLabel = label;
+  }
+
+  setFundingOISignal(score: number, label: string): void {
+    (this.config as Record<string, unknown>)._fundingOIScore = score;
+    (this.config as Record<string, unknown>)._fundingOILabel = label;
   }
 
   getState(): DayTraderState {

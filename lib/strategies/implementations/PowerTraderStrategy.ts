@@ -93,13 +93,25 @@ export class PowerTraderStrategy extends BaseStrategy {
     const newsSentiment = cfg._newsSentiment as number ?? 0;
     const newsSentimentLabel = cfg._newsSentimentLabel as string ?? 'Neutral';
 
+    // Funding rate + OI signal injected by StrategyRunner (-1 bearish → +1 bullish)
+    const fundingOIScore = cfg._fundingOIScore as number ?? 0;
+    const fundingOILabel = cfg._fundingOILabel as string ?? 'Neutral';
+
     // Adjust entry threshold based on news sentiment:
     // Long: bad news → require stronger signal; good news → allow earlier entry
     // Short: good news → require stronger signal; bad news → allow earlier entry (inverted)
     const newsAdjustment = isShort
       ? (newsSentiment >= 0.5 ? 2 : newsSentiment >= 0.2 ? 1 : newsSentiment <= -0.4 ? -1 : 0)
       : (newsSentiment <= -0.5 ? 2 : newsSentiment <= -0.2 ? 1 : newsSentiment >= 0.4 ? -1 : 0);
-    const effectiveStartLevel = Math.max(1, tradeStartLevel + newsAdjustment);
+
+    // Adjust entry threshold based on funding/OI:
+    // Long: overleveraged longs (score < -0.4) → raise threshold; overleveraged shorts (score > 0.4) → lower
+    // Short: inverted
+    const fundingAdjustment = isShort
+      ? (fundingOIScore >= 0.4 ? 1 : fundingOIScore <= -0.4 ? -1 : 0)
+      : (fundingOIScore <= -0.4 ? 1 : fundingOIScore >= 0.4 ? -1 : 0);
+
+    const effectiveStartLevel = Math.max(1, tradeStartLevel + newsAdjustment + fundingAdjustment);
 
     const currentPrice = candles[candles.length - 1].close;
 
@@ -302,7 +314,7 @@ export class PowerTraderStrategy extends BaseStrategy {
             action: 'sell',
             quantity: baseQuantity,
             price: currentPrice,
-            reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost: ${currentPrice.toFixed(4)})`,
+            reason: `Sell entry: neural short ${neuralShortLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}, funding=${fundingOILabel}${atrLog} (Cost: ${currentPrice.toFixed(4)})`,
           };
         }
         return { action: 'hold', reason: `Waiting: neural short=${neuralShortLevel} need ${effectiveStartLevel}${neuralShortLevel >= effectiveStartLevel ? ` (blocked: long signal ${neuralLongLevel} >= short signal)` : ''}, news=${newsSentimentLabel}` };
@@ -323,7 +335,7 @@ export class PowerTraderStrategy extends BaseStrategy {
             action: 'buy',
             quantity: baseQuantity,
             price: currentPrice,
-            reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}${atrLog} (Cost: ${currentPrice.toFixed(4)})`,
+            reason: `Entry: neural ${neuralLongLevel}>=${effectiveStartLevel}, news=${newsSentimentLabel}, funding=${fundingOILabel}${atrLog} (Cost: ${currentPrice.toFixed(4)})`,
           };
         }
         return { action: 'hold', reason: `Waiting: neural=${neuralLongLevel} need ${effectiveStartLevel}${neuralLongLevel >= effectiveStartLevel ? ` (blocked: short signal ${neuralShortLevel} >= long signal)` : ''}, news=${newsSentimentLabel}` };
@@ -437,6 +449,11 @@ export class PowerTraderStrategy extends BaseStrategy {
 
   setMacroTrend(trend: 'bullish' | 'bearish'): void {
     (this.config as Record<string, unknown>)._macroTrend = trend;
+  }
+
+  setFundingOISignal(score: number, label: string): void {
+    (this.config as Record<string, unknown>)._fundingOIScore = score;
+    (this.config as Record<string, unknown>)._fundingOILabel = label;
   }
 
   getState(): PowerTraderState {

@@ -71,6 +71,14 @@ export class ExchangeAdapter {
     return this.exchange.fetchMarkets();
   }
 
+  async getMinOrderAmount(symbol: string): Promise<{ minAmount: number; minCost: number }> {
+    if (!this.exchange.markets) await this.exchange.loadMarkets();
+    const market = this.exchange.markets[symbol];
+    const minAmount = market?.limits?.amount?.min ?? 0;
+    const minCost = market?.limits?.cost?.min ?? 0;
+    return { minAmount, minCost };
+  }
+
   async placeOrder(params: PlaceOrderParams): Promise<Order> {
     const order = await this.exchange.createOrder(
       params.symbol,
@@ -127,5 +135,25 @@ export class ExchangeAdapter {
 
   async cancelOrder(id: string, symbol: string): Promise<void> {
     await this.exchange.cancelOrder(id, symbol);
+  }
+
+  /** Fetch the current funding rate for a perpetual futures symbol.
+   *  Throws if the exchange does not support futures. */
+  async fetchFundingRate(symbol: string): Promise<{ rate: number; timestamp: number }> {
+    const fr = await this.exchange.fetchFundingRate(symbol);
+    return {
+      rate: fr.fundingRate ?? 0,
+      timestamp: fr.fundingTimestamp ?? fr.timestamp ?? Date.now(),
+    };
+  }
+
+  /** Fetch the current open interest for a perpetual futures symbol.
+   *  Throws if the exchange does not support open interest. */
+  async fetchOpenInterest(symbol: string): Promise<{ openInterest: number; timestamp: number }> {
+    const oi = await this.exchange.fetchOpenInterest(symbol);
+    return {
+      openInterest: typeof oi.openInterestAmount === 'number' ? oi.openInterestAmount : Number(oi.openInterestAmount ?? 0),
+      timestamp: oi.timestamp ?? Date.now(),
+    };
   }
 }

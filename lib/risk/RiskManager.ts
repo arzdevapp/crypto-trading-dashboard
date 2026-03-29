@@ -1,4 +1,5 @@
 import type { Signal } from '@/types/strategy';
+import type { CorrelatedExposure } from './CorrelationManager';
 
 export interface RiskProfile {
   maxPositionSizePct: number;
@@ -6,6 +7,9 @@ export interface RiskProfile {
   defaultStopLossPct: number;
   defaultTakeProfitPct: number;
   maxOpenPositions: number;
+  /** Maximum aggregate correlation-weighted exposure (% of portfolio).
+   *  Default 200 — effectively disabled unless explicitly tightened. */
+  maxCorrelatedExposurePct?: number;
 }
 
 export interface PortfolioSnapshot {
@@ -56,6 +60,24 @@ export class RiskManager {
     }
 
     return { approved: errors.length === 0, errors, adjustedSignal };
+  }
+
+  /**
+   * Check whether aggregate correlated exposure across all running strategies
+   * exceeds the configured limit.  Only relevant for new entries (buy signals).
+   */
+  validateCorrelation(exposure: CorrelatedExposure): ValidationResult {
+    const limit = this.profile.maxCorrelatedExposurePct ?? 200;
+    if (exposure.totalCorrelatedPct > limit) {
+      return {
+        approved: false,
+        errors: [
+          `Correlated exposure ${exposure.totalCorrelatedPct.toFixed(1)}% exceeds max ${limit}% — ` +
+          `positions: ${exposure.positions.map(p => `${p.symbol}(r=${p.correlation})`).join(', ')}`,
+        ],
+      };
+    }
+    return { approved: true, errors: [] };
   }
 
   computeStopLoss(entryPrice: number, side: 'buy' | 'sell'): number {

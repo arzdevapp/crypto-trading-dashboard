@@ -5,6 +5,10 @@ import { log } from '../logger';
 import { getPredictor } from '../ml/InstancePredictor';
 import { getNewsSentiment } from '../news/NewsSentimentScorer';
 import { RiskManager } from '../risk/RiskManager';
+import { computeCorrelatedExposure } from '../risk/CorrelationManager';
+import { analyzeOrderBook, shouldBlockEntry } from '../market/OrderBookAnalyzer';
+import { getFundingOISignal } from '../market/FundingOIAnalyzer';
+import { executeSmartOrder } from '../exchange/SmartOrderRouter';
 import type { Signal, StrategyStatus } from '@/types/strategy';
 import type { BaseStrategy } from './BaseStrategy';
 
@@ -13,6 +17,7 @@ interface NeuralAwareStrategy {
   setNeuralLevels(long: number, short: number): void;
   setNewsSentiment(score: number, label: string): void;
   setMacroTrend?(trend: 'bullish' | 'bearish'): void;
+  setFundingOISignal?(score: number, label: string): void;
 }
 
 // Stateful strategies that can persist/restore position state across restarts
@@ -79,10 +84,14 @@ async function persistState(strategyId: string, config: Record<string, unknown>,
   if (!('getState' in strategy)) return;
   const savedState = (strategy as unknown as StatefulStrategy).getState();
   const updatedConfig = { ...config, _savedState: savedState };
-  await prisma.strategy.update({
-    where: { id: strategyId },
-    data: { config: JSON.stringify(updatedConfig) },
-  }).catch(() => {}); // non-fatal — worst case state is lost on restart
+  try {
+    await prisma.strategy.update({
+      where: { id: strategyId },
+      data: { config: JSON.stringify(updatedConfig) },
+    });
+  } catch (err) {
+    await log('error', `strategy:${strategyId}`, `Failed to persist state to DB: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 export async function startStrategy(strategyId: string): Promise<void> {
@@ -91,7 +100,13 @@ export async function startStrategy(strategyId: string): Promise<void> {
   const record = await prisma.strategy.findUnique({ where: { id: strategyId } });
   if (!record) throw new Error('Strategy not found');
 
-  const config = JSON.parse(record.config);
+  let config: Record<string, unknown>;
+  try {
+    config = JSON.parse(record.config);
+  } catch {
+    await log('error', `strategy:${strategyId}`, 'Strategy config is corrupted JSON — cannot start');
+    throw new Error('Strategy config is corrupted');
+  }
   const strategy = createStrategy(record.type, { ...config, symbol: record.symbol, timeframe: record.timeframe, exchangeId: record.exchangeId });
   const adapter = await getExchangeAdapter(record.exchangeId);
 
@@ -99,7 +114,7 @@ export async function startStrategy(strategyId: string): Promise<void> {
 
   // Restore persisted position state (survives server restarts)
   if (config._savedState && 'restoreState' in strategy) {
-    (strategy as unknown as StatefulStrategy).restoreState(config._savedState);
+    (strategy as unknown as StatefulStrategy).restoreState(config._savedState as Record<string, unknown>);
     await log('info', `strategy:${strategyId}`, 'Restored saved position state from DB');
   }
 
@@ -120,7 +135,7 @@ export async function startStrategy(strategyId: string): Promise<void> {
           totalDailyLoss += (rState as Record<string, unknown>).dailyLossTotal as number;
         }
       }
-      const ACCOUNT_MAX_LOSS = 5000; // Hardcoded $5k account-level drawdown limit
+      const ACCOUNT_MAX_LOSS = Number(process.env.ACCOUNT_MAX_DAILY_LOSS) || 5000;
       if (totalDailyLoss >= ACCOUNT_MAX_LOSS) {
         await log('error', `global-risk`, `ACCOUNT KILL SWITCH ENGAGED: Total daily loss $${totalDailyLoss.toFixed(2)} >= $${ACCOUNT_MAX_LOSS} limit. Halting all strategies.`);
         for (const rId of Array.from(runners.keys())) {
@@ -177,6 +192,20 @@ export async function startStrategy(strategyId: string): Promise<void> {
         } catch (e) {
           await log('warn', `strategy:${strategyId}`, `Macro trend fetch failed — keeping last known: ${e instanceof Error ? e.message : String(e)}`);
         }
+
+        // Funding rate + open interest signal (futures data — non-fatal if unavailable)
+        try {
+          const currentPrice = candles[candles.length - 1].close;
+          const fundingOI = await getFundingOISignal(adapter, record.symbol, currentPrice);
+          if (typeof (strategy as unknown as NeuralAwareStrategy).setFundingOISignal === 'function') {
+            (strategy as unknown as NeuralAwareStrategy).setFundingOISignal!(fundingOI.signal, fundingOI.label);
+          }
+          if (fundingOI.label !== 'No futures data') {
+            await log('info', `strategy:${strategyId}`, `Funding/OI: ${fundingOI.label} (${fundingOI.signal.toFixed(2)}), rate=${(fundingOI.fundingRate * 100).toFixed(4)}%, OI change=${fundingOI.openInterestChange.toFixed(1)}%`, { signal: fundingOI.signal, label: fundingOI.label, rate: fundingOI.fundingRate });
+          }
+        } catch (e) {
+          await log('warn', `strategy:${strategyId}`, `Funding/OI fetch failed — keeping last known: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
 
       // Snapshot state BEFORE computing the signal so we can revert if the order fails.
@@ -193,7 +222,7 @@ export async function startStrategy(strategyId: string): Promise<void> {
       await log('signal', `strategy:${strategyId}`, `Signal: ${signal.action.toUpperCase()} ${record.symbol}`, { action: signal.action, price: signal.price, quantity: signal.quantity });
 
       if (signal.action !== 'hold') {
-        const amount = signal.quantity ?? config.quantity ?? 0.001;
+        const amount = Number(signal.quantity ?? config.quantity ?? 0.001);
 
         // Guard: skip if amount is invalid
         if (!amount || isNaN(amount) || amount <= 0) {
@@ -207,6 +236,16 @@ export async function startStrategy(strategyId: string): Promise<void> {
         }
 
         // === RISK MANAGER ENFORCEMENT ===
+        let portfolio = { totalValue: 1000, openPositionCount: 0, drawdownPct: 0, lastPrice: candles[candles.length - 1].close };
+        const rm = new RiskManager({
+          maxPositionSizePct: (config.maxPositionSizePct as number) ?? 95,
+          maxDrawdownPct: (config.maxDrawdownPct as number) ?? 30,
+          defaultStopLossPct: 10,
+          defaultTakeProfitPct: 10,
+          maxOpenPositions: 10,
+          maxCorrelatedExposurePct: (config.maxCorrelatedExposurePct as number) ?? 200,
+        });
+
         try {
           const balances = await adapter.fetchBalance();
           const baseAsset = record.symbol.split('/')[0];
@@ -215,14 +254,6 @@ export async function startStrategy(strategyId: string): Promise<void> {
           const bBalance = balances[baseAsset] ?? { free: 0, used: 0, total: 0 };
           const currentPrice = signal.price ?? candles[candles.length - 1].close;
           const totalValue = qBalance.total + (bBalance.total * currentPrice);
-
-          const rm = new RiskManager({
-            maxPositionSizePct: (config.maxPositionSizePct as number) ?? 95,
-            maxDrawdownPct: (config.maxDrawdownPct as number) ?? 30, // Fallback safe limits
-            defaultStopLossPct: 10,
-            defaultTakeProfitPct: 10,
-            maxOpenPositions: 10
-          });
 
           // Estimate drawdown from strategy state if available
           let drawdownPct = 0;
@@ -245,7 +276,7 @@ export async function startStrategy(strategyId: string): Promise<void> {
             }
           }
 
-          const portfolio = {
+          portfolio = {
             totalValue: totalValue > 0 ? totalValue : 1000,
             openPositionCount,
             drawdownPct,
@@ -277,48 +308,152 @@ export async function startStrategy(strategyId: string): Promise<void> {
           return;
         }
 
-        // Attempt order with retry for transient failures (max 3 attempts, exponential backoff)
+        // Determine if this signal is a NEW entry or an EXIT from an existing position.
+        // Exits (circuit breaker, trailing PM, stop-loss, buy-back) must always execute —
+        // blocking them could leave the bot stuck in a losing position.
+        const wasInPosition = stateSnapshot
+          ? (stateSnapshot as Record<string, unknown>).inPosition === true
+          : false;
+        const isEntry = !wasInPosition;
+
+        // === CROSS-STRATEGY CORRELATION CHECK (new entries only) ===
+        if (isEntry) {
+          try {
+            const exposure = computeCorrelatedExposure(
+              record.symbol,
+              runners as unknown as Parameters<typeof computeCorrelatedExposure>[1],
+              portfolio.totalValue,
+            );
+            const corrValidation = rm.validateCorrelation(exposure);
+            if (!corrValidation.approved) {
+              if (stateSnapshot && 'restoreState' in strategy) {
+                (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+                await persistState(strategyId, config, strategy);
+              }
+              await log('warn', `strategy:${strategyId}`, `Correlation blocked: ${corrValidation.errors.join(', ')}`);
+              return;
+            }
+          } catch (e) {
+            await log('warn', `strategy:${strategyId}`,
+              `Correlation check failed — proceeding: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+
+        // === ORDER BOOK IMBALANCE FILTER (new entries only) ===
+        const obEnabled = (config.obImbalanceEnabled as boolean) ?? true;
+        if (obEnabled && isEntry) {
+          try {
+            const obThreshold = (config.obImbalanceThreshold as number) ?? 60;
+            const imbalance = await analyzeOrderBook(adapter, record.symbol);
+            const obCheck = shouldBlockEntry(imbalance, signal.action as 'buy' | 'sell', obThreshold);
+            if (obCheck.blocked) {
+              if (stateSnapshot && 'restoreState' in strategy) {
+                (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+                await persistState(strategyId, config, strategy);
+              }
+              await log('warn', `strategy:${strategyId}`, obCheck.reason);
+              return;
+            }
+          } catch (e) {
+            await log('warn', `strategy:${strategyId}`,
+              `Order book check failed — proceeding: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+
+        // Pre-validate minimum order size against exchange limits
+        try {
+          const { minAmount, minCost } = await adapter.getMinOrderAmount(record.symbol);
+          const price = signal.price ?? candles[candles.length - 1].close;
+          const cost = amount * price;
+          if (minAmount > 0 && amount < minAmount) {
+            if (stateSnapshot && 'restoreState' in strategy) {
+              (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+              await persistState(strategyId, config, strategy);
+            }
+            await log('warn', `strategy:${strategyId}`,
+              `Skipping ${signal.action} — amount ${amount} below exchange minimum ${minAmount} for ${record.symbol}`);
+            return;
+          }
+          if (minCost > 0 && cost < minCost) {
+            if (stateSnapshot && 'restoreState' in strategy) {
+              (strategy as unknown as StatefulStrategy).restoreState(stateSnapshot);
+              await persistState(strategyId, config, strategy);
+            }
+            await log('warn', `strategy:${strategyId}`,
+              `Skipping ${signal.action} — order cost $${cost.toFixed(2)} below exchange minimum $${minCost} for ${record.symbol}`);
+            return;
+          }
+        } catch (e) {
+          await log('warn', `strategy:${strategyId}`,
+            `Could not check min order size — proceeding anyway: ${e instanceof Error ? e.message : String(e)}`);
+        }
+
+        // === ORDER EXECUTION: Smart Order Router (limit-with-fallback) or direct market ===
+        const smartOrderEnabled = (config.smartOrderEnabled as boolean) ?? false;
         const MAX_RETRIES = 3;
         let lastErr: Error | null = null;
 
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const orderParams = {
+          symbol: record.symbol,
+          type: 'market' as const,
+          side: signal.action as 'buy' | 'sell',
+          amount,
+        };
+
+        if (smartOrderEnabled) {
+          // Smart order: try limit first, fall back to market on timeout
           try {
-            const order = await adapter.placeOrder({
-              symbol: record.symbol,
-              type: 'market',
-              side: signal.action as 'buy' | 'sell',
-              amount,
-            });
+            const result = await executeSmartOrder(adapter, orderParams, {
+              limitTimeoutMs: (config.limitTimeoutMs as number) ?? 30000,
+              limitPriceOffsetBps: (config.limitPriceOffsetBps as number) ?? 5,
+              pollIntervalMs: (config.limitPollIntervalMs as number) ?? 2000,
+              enabled: true,
+            }, async (msg) => { await log('info', `strategy:${strategyId}`, `SmartOrder: ${msg}`); });
 
             await log('trade', `strategy:${strategyId}`,
-              `Order placed: ${signal.action.toUpperCase()} ${amount} ${record.symbol}${attempt > 1 ? ` (attempt ${attempt})` : ''}`,
-              { orderId: order.id, amount, price: signal.price });
+              `Order placed (${result.executionType}): ${signal.action.toUpperCase()} ${amount} ${record.symbol} in ${result.fillTimeMs}ms`,
+              { orderId: result.order.id, amount, price: signal.price, executionType: result.executionType });
 
-            // Order confirmed — persist the new state and update local config reference
             await persistState(strategyId, config, strategy);
-            // Reload config to get persisted state for next iteration
             const updated = await prisma.strategy.findUnique({ where: { id: strategyId } });
             if (updated) {
               Object.assign(config, JSON.parse(updated.config));
             }
-            lastErr = null;
-            break; // success
           } catch (err) {
             lastErr = err instanceof Error ? err : new Error(String(err));
+          }
+        } else {
+          // Original market order path with retry logic
+          for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              const order = await adapter.placeOrder(orderParams);
 
-            // Permanent error (e.g. insufficient funds) — no point retrying
-            if (isPermanentError(lastErr)) break;
+              await log('trade', `strategy:${strategyId}`,
+                `Order placed: ${signal.action.toUpperCase()} ${amount} ${record.symbol}${attempt > 1 ? ` (attempt ${attempt})` : ''}`,
+                { orderId: order.id, amount, price: signal.price });
 
-            // Transient error — wait and retry
-            if (isTransientError(lastErr) && attempt < MAX_RETRIES) {
-              const wait = attempt * 2000; // 2s → 4s
-              await log('warn', `strategy:${strategyId}`,
-                `Order attempt ${attempt} failed (${lastErr.message}) — retrying in ${wait / 1000}s`);
-              await sleep(wait);
-              continue;
+              await persistState(strategyId, config, strategy);
+              const updated = await prisma.strategy.findUnique({ where: { id: strategyId } });
+              if (updated) {
+                Object.assign(config, JSON.parse(updated.config));
+              }
+              lastErr = null;
+              break; // success
+            } catch (err) {
+              lastErr = err instanceof Error ? err : new Error(String(err));
+
+              if (isPermanentError(lastErr)) break;
+
+              if (isTransientError(lastErr) && attempt < MAX_RETRIES) {
+                const wait = attempt * 2000;
+                await log('warn', `strategy:${strategyId}`,
+                  `Order attempt ${attempt} failed (${lastErr.message}) — retrying in ${wait / 1000}s`);
+                await sleep(wait);
+                continue;
+              }
+
+              break;
             }
-
-            break; // unknown error — don't retry
           }
         }
 
@@ -378,7 +513,8 @@ export async function startStrategy(strategyId: string): Promise<void> {
       }
 
       // Permanent error — stop the runner so we don't keep spamming on every tick
-      clearInterval(interval);
+      const self = runners.get(strategyId);
+      if (self) clearInterval(self.interval);
       runners.delete(strategyId);
       await prisma.strategy.update({ where: { id: strategyId }, data: { status: 'error' } }).catch(() => {});
       statusCallback?.(strategyId, 'error', undefined, error.message);
